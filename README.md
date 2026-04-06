@@ -92,6 +92,16 @@ Each instance gets its own:
 
 under `.openclaw/instances/<N>/`.
 
+Gemma4 triad persona seeding:
+
+- Instance 1 / `Aster`: systems lead for deployment, manifests, and state hygiene
+- Instance 2 / `Lyra`: builder muse for docs, prompts, and fast idea shaping
+- Instance 3 / `Noctis`: verification sentinel for tests, diffs, and risk checks
+
+`init --count 3` also seeds each workspace with managed `SOUL.md`, `IDENTITY.md`,
+`HEARTBEAT.md`, `BOOTSTRAP.md`, `USER.md`, and `TOOLS.md`.
+Legacy stock templates are upgraded automatically, and managed scaffold files are refreshed on re-init.
+
 ## ⚙️ Model Setups
 
 ### Ollama

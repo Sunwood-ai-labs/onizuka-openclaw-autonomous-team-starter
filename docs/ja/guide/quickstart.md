@@ -35,3 +35,12 @@ podman kube play --replace --no-pod-prefix .\.openclaw\pod.yaml
 .\scripts\logs.ps1 --instance 2 -Follow
 .\scripts\stop.ps1 --count 3 --remove
 ```
+
+Gemma4 3体の初期人格:
+
+- Instance 1 / `Aster`: systems lead
+- Instance 2 / `Lyra`: builder muse
+- Instance 3 / `Noctis`: verification sentinel
+
+`init --count 3` で各 instance workspace に `SOUL.md`, `IDENTITY.md`,
+`HEARTBEAT.md`, `BOOTSTRAP.md`, `USER.md`, `TOOLS.md` を配置します。

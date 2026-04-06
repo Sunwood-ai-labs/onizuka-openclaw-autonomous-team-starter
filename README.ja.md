@@ -88,6 +88,16 @@ podman kube play --replace --no-pod-prefix .\.openclaw\pod.yaml
 - `pod.yaml`
 - `workspace/`
 
+Gemma4 3体の初期人格もここで生成されます。
+
+- Instance 1 / `Aster`: systems lead
+- Instance 2 / `Lyra`: builder muse
+- Instance 3 / `Noctis`: verification sentinel
+
+`init --count 3` は各 workspace に `SOUL.md`, `IDENTITY.md`, `HEARTBEAT.md`,
+`BOOTSTRAP.md`, `USER.md`, `TOOLS.md` を作成します。
+OpenClaw の素のテンプレートは昇格更新され、managed scaffold は再 `init` 時に再生成されます。
+
 ## ⚙️ モデル構成
 
 ### Ollama
