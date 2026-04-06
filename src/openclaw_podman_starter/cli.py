@@ -234,7 +234,7 @@ def ensure_openclaw_config(cfg: Config) -> None:
 
     agents = ensure_object(payload, "agents")
     defaults = ensure_object(agents, "defaults")
-    defaults["workspace"] = str(cfg.workspace_dir)
+    defaults["workspace"] = CONTAINER_WORKSPACE_DIR
     model = ensure_object(defaults, "model")
     model["primary"] = model_ref_for(cfg)
     sandbox = ensure_object(defaults, "sandbox")
@@ -297,9 +297,33 @@ def command_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
 
+def podman_bin() -> str:
+    resolved = shutil.which("podman")
+    if resolved:
+        return resolved
+
+    if os.name == "nt":
+        candidate = Path.home() / "AppData" / "Local" / "Programs" / "Podman" / "podman.exe"
+        if candidate.exists():
+            return str(candidate)
+
+    return "podman"
+
+
+def podman_available() -> bool:
+    binary = podman_bin()
+    return shutil.which(binary) is not None or Path(binary).exists()
+
+
 def podman_host_path(path: Path) -> str:
     resolved = path.resolve()
-    return resolved.as_posix() if os.name == "nt" else str(resolved)
+    if os.name == "nt":
+        drive = resolved.drive.rstrip(":").lower()
+        tail = resolved.as_posix().split(":/", 1)
+        if drive and len(tail) == 2:
+            return f"/mnt/{drive}/{tail[1]}"
+        return resolved.as_posix()
+    return str(resolved)
 
 
 def runtime_env_pairs(cfg: Config) -> list[tuple[str, str]]:
@@ -509,7 +533,7 @@ def ensure_kube_manifest(cfg: Config, pod_name: str | None = None, instance_labe
 
 def build_kube_play_command(cfg: Config, pod_name: str | None = None, instance_label: str = "single") -> list[str]:
     manifest_path = ensure_kube_manifest(cfg, pod_name=pod_name, instance_label=instance_label)
-    command = ["podman", "kube", "play", "--replace", "--no-pod-prefix"]
+    command = [podman_bin(), "kube", "play", "--replace", "--no-pod-prefix"]
     if cfg.userns:
         command.extend(["--userns", cfg.userns])
     command.append(str(manifest_path))
@@ -517,7 +541,7 @@ def build_kube_play_command(cfg: Config, pod_name: str | None = None, instance_l
 
 
 def build_kube_down_command(cfg: Config) -> list[str]:
-    return ["podman", "kube", "down", str(manifest_path_for_config(cfg))]
+    return [podman_bin(), "kube", "down", str(manifest_path_for_config(cfg))]
 
 
 def run_process(command: list[str], check: bool = True) -> int:
@@ -569,7 +593,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         cfg = load_config(args.env_file)
 
     checks.append(("uv", command_exists("uv"), "required to run the helper"))
-    checks.append(("podman", command_exists("podman"), "required to launch the container"))
+    checks.append(("podman", podman_available(), "required to launch the container"))
     checks.append(("openclaw", command_exists("openclaw"), "recommended for host-side control plane"))
     checks.append(("OLLAMA_API_KEY", bool(cfg.raw_env.get("OLLAMA_API_KEY", "").strip()), "set a placeholder like ollama-local"))
     checks.append((".env", env_exists, str(args.env_file)))
@@ -608,7 +632,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
             for instance_id in selected_instance_ids(args.instance, args.count)
         ]
 
-        if not args.dry_run and not command_exists("podman"):
+        if not args.dry_run and not podman_available():
             print("[fail] podman is not installed or not on PATH", file=sys.stderr)
             return 1
 
@@ -642,7 +666,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
 
-    if not command_exists("podman"):
+    if not podman_available():
         print("[fail] podman is not installed or not on PATH", file=sys.stderr)
         return 1
 
@@ -655,7 +679,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     if has_scaled_selection(args):
-        if not command_exists("podman"):
+        if not podman_available():
             print("[fail] podman is not installed or not on PATH", file=sys.stderr)
             return 1
 
@@ -663,14 +687,14 @@ def cmd_status(args: argparse.Namespace) -> int:
         for instance_id in selected_instance_ids(args.instance, args.count):
             instance = scaled_instance(args.env_file, instance_id)
             pod_result = subprocess.run(
-                ["podman", "pod", "ps", "--noheading", "--filter", f"name={instance.pod_name}", "--format", "{{.Name}}|{{.Status}}"],
+                [podman_bin(), "pod", "ps", "--noheading", "--filter", f"name={instance.pod_name}", "--format", "{{.Name}}|{{.Status}}"],
                 check=False,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
             )
             container_result = subprocess.run(
-                ["podman", "ps", "-a", "--noheading", "--filter", f"name={instance.container_name}", "--format", "{{.Names}}|{{.Status}}"],
+                [podman_bin(), "ps", "-a", "--noheading", "--filter", f"name={instance.container_name}", "--format", "{{.Names}}|{{.Status}}"],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -684,11 +708,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         return overall
 
     cfg = load_config(args.env_file)
-    if not command_exists("podman"):
+    if not podman_available():
         print("[fail] podman is not installed or not on PATH", file=sys.stderr)
         return 1
     return run_process(
-        ["podman", "pod", "ps", "--filter", f"name={pod_name_for_config(cfg)}"],
+        [podman_bin(), "pod", "ps", "--filter", f"name={pod_name_for_config(cfg)}"],
         check=False,
     )
 
@@ -697,31 +721,31 @@ def cmd_logs(args: argparse.Namespace) -> int:
     if has_scaled_selection(args):
         if getattr(args, "count", None) is not None:
             raise SystemExit("logs only supports --instance.")
-        if not command_exists("podman"):
+        if not podman_available():
             print("[fail] podman is not installed or not on PATH", file=sys.stderr)
             return 1
         instance = scaled_instance(args.env_file, args.instance)
-        command = ["podman", "pod", "logs", "--names"]
+        command = [podman_bin(), "logs"]
         if args.follow:
             command.append("-f")
-        command.append(instance.pod_name)
+        command.append(instance.container_name)
         return run_process(command, check=False)
 
     cfg = load_config(args.env_file)
-    if not command_exists("podman"):
+    if not podman_available():
         print("[fail] podman is not installed or not on PATH", file=sys.stderr)
         return 1
 
-    command = ["podman", "pod", "logs", "--names"]
+    command = [podman_bin(), "logs"]
     if args.follow:
         command.append("-f")
-    command.append(pod_name_for_config(cfg))
+    command.append(cfg.container_name)
     return run_process(command, check=False)
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
     if has_scaled_selection(args):
-        if not args.dry_run and not command_exists("podman"):
+        if not args.dry_run and not podman_available():
             print("[fail] podman is not installed or not on PATH", file=sys.stderr)
             return 1
 
@@ -738,7 +762,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
         return overall
 
     cfg = load_config(args.env_file)
-    if not command_exists("podman"):
+    if not podman_available():
         print("[fail] podman is not installed or not on PATH", file=sys.stderr)
         return 1
 
