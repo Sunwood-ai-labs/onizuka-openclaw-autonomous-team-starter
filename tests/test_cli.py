@@ -150,13 +150,13 @@ class CliTests(unittest.TestCase):
                 self.assertTrue(bbs_path.exists())
                 self.assertIn(f"# SOUL.md - {name}", soul_text)
                 self.assertIn("- ユーザーが別言語を明示しない限り、日本語で返答する。", soul_text)
-                self.assertIn("- ユーザーが英語で話しかけても、翻訳依頼や英語指定がない限り返答は日本語で行う。", soul_text)
+                self.assertIn("- かしこまりすぎず、同じチームで話す感じでいく。", soul_text)
                 self.assertIn(cli.CONTAINER_SHARED_BOARD_DIR, soul_text)
                 self.assertIn(f"**名前:** {name}", identity_text)
                 self.assertIn("**返答言語:** 日本語が既定", identity_text)
-                self.assertIn("**補足:** 英語で話しかけられても、英語指定がなければ日本語で返す", identity_text)
+                self.assertIn("もっと気楽に寄せてよい", identity_text)
                 self.assertIn(f"# BBS.md - {name} の共有掲示板メモ", bbs_text)
-                self.assertIn(cli.CONTAINER_SHARED_BOARD_DIR, bbs_text)
+                self.assertIn("軽い相談や雑談の投げ込みでも使っていい。", bbs_text)
                 self.assertEqual(resolved.config.config_dir.name, f"agent_{instance_id:03d}")
 
     def test_scaled_instance_state_seeds_shared_board_and_manifest_mount(self) -> None:
