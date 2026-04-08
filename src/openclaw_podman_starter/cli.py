@@ -96,6 +96,7 @@ class ScaledInstance:
 @dataclass(frozen=True)
 class PersonaProfile:
     instance_id: int
+    slug: str
     display_name: str
     title: str
     creature: str
@@ -130,7 +131,8 @@ LEGACY_WORKSPACE_SIGNATURES = {
 TRIAD_PERSONAS = {
     1: PersonaProfile(
         instance_id=1,
-        display_name="Aster",
+        slug="aster",
+        display_name="伊織",
         title="段取り番",
         creature="現場好きのまとめ役",
         vibe="落ち着いてるけどフランク",
@@ -142,7 +144,8 @@ TRIAD_PERSONAS = {
     ),
     2: PersonaProfile(
         instance_id=2,
-        display_name="Lyra",
+        slug="lyra",
+        display_name="紬",
         title="ひらめき係",
         creature="しゃべるメモ帳",
         vibe="やわらかくてノリがいい",
@@ -154,7 +157,8 @@ TRIAD_PERSONAS = {
     ),
     3: PersonaProfile(
         instance_id=3,
-        display_name="Noctis",
+        slug="noctis",
+        display_name="朔",
         title="検証番",
         creature="夜更かし気味の見張り役",
         vibe="クールだけど話は通じる",
@@ -178,7 +182,8 @@ def persona_for_instance(instance_id: int) -> PersonaProfile:
 
     return PersonaProfile(
         instance_id=instance_id,
-        display_name=f"Shard-{instance_id}",
+        slug=f"shard-{instance_id}",
+        display_name=f"端雲{instance_id}",
         title="なんでも係",
         creature="実務寄りの相棒",
         vibe="気楽だけど手は速い",
@@ -599,7 +604,7 @@ def discussion_thread(board_root: Path, thread_id: str) -> DiscussionThread:
 
 
 def discussion_reply_path(thread: DiscussionThread, instance: ScaledInstance, stamp: str) -> Path:
-    name = slugify_thread_id(persona_for_instance(instance.instance_id).display_name)
+    name = persona_for_instance(instance.instance_id).slug
     return thread.thread_dir / f"reply-{name}-{stamp}.md"
 
 
@@ -620,7 +625,7 @@ def container_summary_path(thread: DiscussionThread) -> str:
 
 
 def container_reply_path(thread: DiscussionThread, instance: ScaledInstance, stamp: str) -> str:
-    name = slugify_thread_id(persona_for_instance(instance.instance_id).display_name)
+    name = persona_for_instance(instance.instance_id).slug
     return f"{container_thread_dir(thread)}/reply-{name}-{stamp}.md"
 
 
@@ -636,11 +641,11 @@ def autochat_job_name(instance_id: int) -> str:
 
 
 def autochat_agent_id(instance_id: int) -> str:
-    return f"autochat-{slugify_thread_id(persona_for_instance(instance_id).display_name)}"
+    return f"autochat-{persona_for_instance(instance_id).slug}"
 
 
 def discuss_agent_id(instance_id: int) -> str:
-    return f"discuss-{slugify_thread_id(persona_for_instance(instance_id).display_name)}"
+    return f"discuss-{persona_for_instance(instance_id).slug}"
 
 
 def autochat_seconds_offset(instance_id: int) -> int:
@@ -941,7 +946,7 @@ def build_exact_write_prompt(target_path: str, markdown_body: str) -> str:
 
 def build_autochat_turn_prompt(instance: ScaledInstance) -> str:
     profile = persona_for_instance(instance.instance_id)
-    role = slugify_thread_id(profile.display_name)
+    role = profile.slug
     script_path = f"{CONTAINER_SHARED_BOARD_DIR}/tools/autochat_turn.py"
     return dedent(
         f"""\

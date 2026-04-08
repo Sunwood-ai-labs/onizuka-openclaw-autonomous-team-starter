@@ -82,7 +82,7 @@ class CliTests(unittest.TestCase):
             raw_text="Body",
         )
         html = render_board_view.bubble_html(message)
-        self.assertIn("Lyra | TURN", html)
+        self.assertIn("紬 | TURN", html)
         self.assertNotIn("·", html)
 
     def test_autochat_helpers(self) -> None:
@@ -136,7 +136,7 @@ class CliTests(unittest.TestCase):
             env_file = temp_root / ".env"
             write_env_file(env_file)
 
-            expected = {1: "Aster", 2: "Lyra", 3: "Noctis"}
+            expected = {1: "伊織", 2: "紬", 3: "朔"}
             for instance_id, name in expected.items():
                 resolved = cli.ensure_scaled_instance_state(cli.scaled_instance(env_file, instance_id))
                 soul_path = resolved.config.workspace_dir / "SOUL.md"

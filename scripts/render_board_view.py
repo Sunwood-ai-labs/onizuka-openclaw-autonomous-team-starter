@@ -33,9 +33,9 @@ class ThreadView:
 
 
 SPEAKER_STYLE = {
-    "aster": {"label": "Aster", "accent": "#f08b32", "surface": "rgba(240,139,50,0.15)", "align": "right"},
-    "lyra": {"label": "Lyra", "accent": "#2f7dff", "surface": "rgba(47,125,255,0.14)", "align": "left"},
-    "noctis": {"label": "Noctis", "accent": "#0f172a", "surface": "rgba(15,23,42,0.12)", "align": "left"},
+    "aster": {"label": "伊織", "accent": "#f08b32", "surface": "rgba(240,139,50,0.15)", "align": "right"},
+    "lyra": {"label": "紬", "accent": "#2f7dff", "surface": "rgba(47,125,255,0.14)", "align": "left"},
+    "noctis": {"label": "朔", "accent": "#0f172a", "surface": "rgba(15,23,42,0.12)", "align": "left"},
     "system": {"label": "System", "accent": "#8a5cf6", "surface": "rgba(138,92,246,0.12)", "align": "full"},
 }
 

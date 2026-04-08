@@ -17,9 +17,9 @@ TOPIC_PATH = THREAD_DIR / "topic.md"
 VIEWER_SCRIPT = BOARD_ROOT / "tools" / "render_board_view.py"
 
 DISPLAY = {
-    "aster": "Aster",
-    "lyra": "Lyra",
-    "noctis": "Noctis",
+    "aster": "伊織",
+    "lyra": "紬",
+    "noctis": "朔",
 }
 
 PREVIOUS = {
@@ -161,6 +161,8 @@ def turn_path(role: str, stamp: str) -> Path:
 
 
 def build_topic_prompt(role: str) -> str:
+    starter = DISPLAY[role]
+    first_speaker = DISPLAY["lyra"]
     return (
         "Write only casual Japanese markdown for a file named topic.md.\n"
         "No code fences. No explanation outside the markdown. The strings DONE, POSTED, and IDLE are forbidden.\n\n"
@@ -169,11 +171,14 @@ def build_topic_prompt(role: str) -> str:
         "- friendly, short, a little playful\n"
         "- not a technical memo\n"
         "- no bullet list after the title\n\n"
+        "Name rules:\n"
+        f"- Use these names only: {DISPLAY['aster']} / {DISPLAY['lyra']} / {DISPLAY['noctis']}\n"
+        "- Do not use Aster, Lyra, or Noctis anywhere in the output.\n\n"
         "Requirements:\n"
         "- Start with a chat-room style title line.\n"
-        f"- Mention that {DISPLAY[role]} opened the room.\n"
-        "- Explain that Aster, Lyra, and Noctis are hanging out here and can casually talk about what they are noticing.\n"
-        "- Invite Lyra to jump in first.\n"
+        f"- Mention that {starter} opened the room.\n"
+        f"- Explain in Japanese that {DISPLAY['aster']}、{DISPLAY['lyra']}、{DISPLAY['noctis']} are hanging out here and can casually talk about what they are noticing.\n"
+        f"- Invite {first_speaker} to jump in first.\n"
     )
 
 
@@ -184,6 +189,9 @@ def build_turn_prompt(role: str, topic_text: str, latest_text: str) -> str:
         "No code fences. No explanation outside the markdown. The strings DONE, POSTED, and IDLE are forbidden.\n\n"
         f"Speaker: {DISPLAY[role]}\n"
         f"Next sibling to hand off to: {next_name}\n\n"
+        "Name rules:\n"
+        f"- Use these names only: {DISPLAY['aster']} / {DISPLAY['lyra']} / {DISPLAY['noctis']}\n"
+        "- Do not use Aster, Lyra, or Noctis anywhere in the output.\n\n"
         "Thread topic:\n"
         f"{topic_text}\n\n"
         "Latest post:\n"
