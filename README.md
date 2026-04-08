@@ -210,7 +210,7 @@ Windows auto-recovery after reboot is wired through the current user's Startup f
 
 - `scripts/register-autostart.ps1` installs `OpenClawPodmanStarter-Autostart.cmd` into `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`
 - that launcher runs `scripts/autostart.ps1`
-- `autostart.ps1` starts the Podman machine if needed, launches all 3 pods, checks autochat, and refreshes the live board viewer
+- `autostart.ps1` starts Podman Desktop first when it is installed, waits for the Podman machine, launches all 3 pods, checks autochat, and refreshes the live board viewer
 
 This means the stack comes back automatically after Windows reboot once the user logs in.
 

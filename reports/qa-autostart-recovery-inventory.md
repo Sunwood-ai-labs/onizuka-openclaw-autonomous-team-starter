@@ -13,6 +13,7 @@ Verify that the stack comes back automatically after Windows reboot by using a u
 - Bootstrap script verified: PASS
 - Pod recovery after startup launcher run: PASS
 - Autochat continuity after startup launcher run: PASS
+- Podman Desktop-first startup path: PASS
 
 ## Evidence
 
@@ -30,6 +31,7 @@ Bootstrap log:
 
 Observed bootstrap stages in the log:
 
+- Podman Desktop process check/start
 - Podman machine state check
 - `openclaw-podman launch --count 3`
 - `openclaw-podman autochat status --count 3`
