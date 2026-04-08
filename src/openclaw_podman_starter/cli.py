@@ -1461,6 +1461,7 @@ def run_mattermost_lounge_turn_now(instance: ScaledInstance, timeout_seconds: in
             str(instance.instance_id),
             "--timeout",
             str(timeout_seconds),
+            "--force",
         ],
         timeout_seconds=max(120, timeout_seconds + 60),
     )

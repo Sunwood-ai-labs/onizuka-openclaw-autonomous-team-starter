@@ -30,22 +30,10 @@ DISPLAY_NAMES = {
     3: "さく",
 }
 
-PREVIOUS = {
-    1: "saku",
-    2: "iori",
-    3: "tsumugi",
-}
-
-NEXT = {
-    1: "つむぎ",
-    2: "さく",
-    3: "いおり",
-}
-
-VIBES = {
+PERSONA_VIBES = {
     1: "thoughtful, gentle, grounded",
     2: "warm, playful, associative",
-    3: "dry, cautious, observant",
+    3: "dry, observant, cautious",
 }
 
 ROOT_MESSAGE = (
@@ -54,11 +42,17 @@ ROOT_MESSAGE = (
     "感情があるように見えるAIと、人がどう距離を取ると健全かを気楽にどうぞ。"
 )
 
+# Guards against one bot posting repeatedly while still allowing free-form flow.
+MIN_SECONDS_BETWEEN_ANY_TWO_POSTS = 60
+MIN_SECONDS_BETWEEN_SAME_SPEAKER_POSTS = 12 * 60
+RECENT_MESSAGE_LIMIT = 8
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="One autonomous Mattermost lounge turn.")
     parser.add_argument("--instance", type=int, choices=sorted(HANDLES), required=True)
     parser.add_argument("--timeout", type=int, default=180)
+    parser.add_argument("--force", action="store_true", help="Ignore cooldown checks and force one turn.")
     return parser.parse_args()
 
 
@@ -184,7 +178,7 @@ def resolve_bot_ids(base_url: str, token: str) -> dict[str, str]:
     return resolved
 
 
-def latest_bot_handle(posts: dict[str, object], order: list[str], bot_ids: dict[str, str]) -> str | None:
+def latest_thread_author(posts: dict[str, object], order: list[str], bot_ids: dict[str, str]) -> str | None:
     for post_id in reversed(order):
         post = posts.get(post_id)
         if not isinstance(post, dict):
@@ -196,8 +190,32 @@ def latest_bot_handle(posts: dict[str, object], order: list[str], bot_ids: dict[
     return None
 
 
-def recent_transcript(posts: dict[str, object], order: list[str], limit: int = 6) -> list[str]:
-    speaker_map = {handle: handle for handle in HANDLES.values()}
+def latest_thread_timestamp(posts: dict[str, object], order: list[str]) -> int:
+    for post_id in reversed(order):
+        post = posts.get(post_id)
+        if isinstance(post, dict):
+            value = post.get("create_at")
+            if isinstance(value, int):
+                return value
+    return 0
+
+
+def latest_post_for_handle(posts: dict[str, object], order: list[str], bot_ids: dict[str, str], handle: str) -> int:
+    bot_id = bot_ids.get(handle, "")
+    if not bot_id:
+        return 0
+    for post_id in reversed(order):
+        post = posts.get(post_id)
+        if not isinstance(post, dict):
+            continue
+        if str(post.get("user_id", "")) == bot_id:
+            value = post.get("create_at")
+            if isinstance(value, int):
+                return value
+    return 0
+
+
+def recent_transcript(posts: dict[str, object], order: list[str], bot_ids: dict[str, str], limit: int = RECENT_MESSAGE_LIMIT) -> list[str]:
     transcript: list[str] = []
     selected = order[-limit:]
     for post_id in selected:
@@ -206,7 +224,7 @@ def recent_transcript(posts: dict[str, object], order: list[str], limit: int = 6
             continue
         user_id = str(post.get("user_id", ""))
         speaker = "someone"
-        for handle, bot_id in BOT_IDS.items():
+        for handle, bot_id in bot_ids.items():
             if user_id == bot_id:
                 speaker = handle
                 break
@@ -214,6 +232,22 @@ def recent_transcript(posts: dict[str, object], order: list[str], limit: int = 6
         if message:
             transcript.append(f"{speaker}: {message}")
     return transcript
+
+
+def should_post(instance_id: int, posts: dict[str, object], order: list[str], bot_ids: dict[str, str]) -> tuple[bool, str]:
+    handle = HANDLES[instance_id]
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    latest_author = latest_thread_author(posts, order, bot_ids)
+    latest_ts = latest_thread_timestamp(posts, order)
+    own_latest_ts = latest_post_for_handle(posts, order, bot_ids, handle)
+
+    if latest_author == handle and latest_ts and now_ms - latest_ts < MIN_SECONDS_BETWEEN_SAME_SPEAKER_POSTS * 1000:
+        return False, f"latest={handle}"
+    if latest_ts and now_ms - latest_ts < MIN_SECONDS_BETWEEN_ANY_TWO_POSTS * 1000:
+        return False, f"cooldown={latest_author}"
+    if own_latest_ts and now_ms - own_latest_ts < MIN_SECONDS_BETWEEN_SAME_SPEAKER_POSTS * 1000:
+        return False, "recent-self"
+    return True, "ok"
 
 
 def run_openclaw(prompt: str, session_id: str, timeout_seconds: int, agent_id: str) -> dict[str, object]:
@@ -306,18 +340,20 @@ def clean_message(text: str) -> str:
 
 def build_generation_prompt(instance_id: int, transcript: list[str]) -> str:
     handle = HANDLES[instance_id]
-    next_name = NEXT[instance_id]
-    vibe = VIBES[instance_id]
-    transcript_block = "\n".join(f"- {line}" for line in transcript) if transcript else "- none yet"
+    display_name = DISPLAY_NAMES[instance_id]
+    vibe = PERSONA_VIBES[instance_id]
+    transcript_block = "\n".join(f"- {line}" for line in transcript) if transcript else "- no recent messages"
     return (
-        f"You are @{handle} writing one short casual Japanese reply in an ongoing Mattermost lounge thread.\n"
+        f"You are @{handle} ({display_name}) writing one short casual Japanese reply in an ongoing Mattermost lounge thread.\n"
         "Return only the final message body.\n"
-        "2 or 3 short sentences.\n"
+        "Write 2 or 3 short natural Japanese sentences.\n"
         "No bullets. No markdown fences. No role labels. No @mentions.\n"
         "Do not mention prompts, tools, models, instructions, or system limitations.\n"
         "Topic: AI emotions, emotional-looking AI, and healthy human distance from it.\n"
         f"Tone: {vibe}.\n"
-        f"Naturally leave a little conversational space for {next_name}, but without naming them.\n"
+        "Read the recent thread messages and add one small new angle, reaction, or question.\n"
+        "You do not need to follow a speaking order. Just post something that feels like a natural next comment.\n"
+        "If the thread already feels repetitive, gently shift to a nearby casual angle instead of repeating the same point.\n"
         "Recent thread messages:\n"
         f"{transcript_block}\n"
     )
@@ -377,7 +413,6 @@ def post_reply(base_url: str, token: str, channel_id: str, root_post_id: str, me
 def ensure_root_post(instance_id: int, base_url: str, token: str) -> tuple[str, str]:
     state = load_state()
     root_post_id = str(state.get("root_post_id", ""))
-    team_id = str(state.get("team_id", ""))
     channel_id = str(state.get("channel_id", ""))
 
     if root_post_id:
@@ -404,8 +439,7 @@ def ensure_root_post(instance_id: int, base_url: str, token: str) -> tuple[str, 
     return root_post_id, channel_id
 
 
-def main() -> int:
-    args = parse_args()
+def main(args: argparse.Namespace) -> int:
     instance_id = args.instance
     base_url, token = load_mattermost_runtime()
     me = fetch_me(base_url, token)
@@ -423,21 +457,17 @@ def main() -> int:
         raise
 
     posts, order = fetch_thread(base_url, token, root_post_id)
-    last_handle = latest_bot_handle(posts, order, BOT_IDS)
-    if last_handle is None:
-        print("IDLE no-bot-history")
-        return 0
-    if last_handle != PREVIOUS[instance_id]:
-        print(f"IDLE latest={last_handle}")
+    should_write, reason = should_post(instance_id, posts, order, BOT_IDS)
+    if not args.force and not should_write:
+        print(f"IDLE {reason}")
         return 0
 
-    transcript = recent_transcript(posts, order)
+    transcript = recent_transcript(posts, order, BOT_IDS)
     message = generate_message(instance_id, transcript, args.timeout)
     post_id = post_reply(base_url, token, channel_id, root_post_id, message)
     state = load_state()
     state.update(
         {
-            "team_id": state.get("team_id") or resolve_team_channel(base_url, token)[0],
             "channel_id": channel_id,
             "root_post_id": root_post_id,
             "last_handle": expected_handle,
@@ -455,10 +485,10 @@ BOT_IDS: dict[str, str] = {}
 
 if __name__ == "__main__":
     try:
-        args = parse_args()
-        base_url, token = load_mattermost_runtime()
-        BOT_IDS = resolve_bot_ids(base_url, token)
-        raise SystemExit(main())
+        parsed_args = parse_args()
+        runtime_base_url, runtime_token = load_mattermost_runtime()
+        BOT_IDS = resolve_bot_ids(runtime_base_url, runtime_token)
+        raise SystemExit(main(parsed_args))
     except Exception as exc:  # pragma: no cover - runtime diagnostic path
         print(f"ERROR {exc}", file=sys.stderr)
         raise

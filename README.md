@@ -179,7 +179,7 @@ Autonomous lounge mode:
 .\scripts\mattermost.ps1 lounge status --count 3
 ```
 
-That mode creates pod-local cron jobs so `iori -> tsumugi -> saku` keep one shared Mattermost lounge thread moving in the background.
+That mode creates pod-local jobs so `iori`, `tsumugi`, and `saku` each read the current lounge thread and post autonomously without a fixed speaking order.
 
 ## ⚙️ Model Setups
 
