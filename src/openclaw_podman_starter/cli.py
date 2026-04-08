@@ -3,11 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from textwrap import dedent
 
@@ -15,8 +18,11 @@ from textwrap import dedent
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = REPO_ROOT / ".env"
 ENV_EXAMPLE_FILE = REPO_ROOT / ".env.example"
+AUTOCHAT_SCRIPT_FILE = REPO_ROOT / "scripts" / "autochat_turn.py"
+BOARD_RENDER_SCRIPT_FILE = REPO_ROOT / "scripts" / "render_board_view.py"
 CONTAINER_CONFIG_DIR = "/home/node/.openclaw"
 CONTAINER_WORKSPACE_DIR = "/home/node/.openclaw/workspace"
+CONTAINER_SHARED_BOARD_DIR = "/home/node/.openclaw/shared-board"
 STATE_ENV_NAME = ".env"
 DEFAULT_OLLAMA_MODEL_ID = "gemma4:e2b"
 DEFAULT_MODEL_REF = f"ollama/{DEFAULT_OLLAMA_MODEL_ID}"
@@ -29,6 +35,10 @@ DEFAULT_SCALE_PORT_STEP = 2
 MANAGED_LABEL_KEY = "io.openclaw-podman.managed"
 INSTANCE_LABEL_KEY = "io.openclaw-podman.instance"
 WORKSPACE_MANAGED_MARKER = "<!-- Managed by openclaw-podman-starter: persona scaffold -->"
+BOARD_MANAGED_MARKER = "<!-- Managed by openclaw-podman-starter: shared board scaffold -->"
+DEFAULT_DISCUSSION_INSTANCE_COUNT = 3
+AUTOCHAT_THREAD_ID = "background-lounge"
+AUTOCHAT_JOB_PREFIX = "shared-board-autochat"
 
 DEFAULTS = {
     "OPENCLAW_CONTAINER": "openclaw",
@@ -97,6 +107,14 @@ class PersonaProfile:
     heartbeat_focus: str
 
 
+@dataclass(frozen=True)
+class DiscussionThread:
+    thread_id: str
+    thread_dir: Path
+    topic_path: Path
+    summary_path: Path
+
+
 LEGACY_WORKSPACE_SIGNATURES = {
     "SOUL.md": (
         "You're not a chatbot. You're becoming someone.",
@@ -113,38 +131,38 @@ TRIAD_PERSONAS = {
     1: PersonaProfile(
         instance_id=1,
         display_name="Aster",
-        title="Systems Lead",
-        creature="pod-born tactician",
-        vibe="calm, structured, exact",
+        title="システム統括",
+        creature="pod生まれの戦術家",
+        vibe="冷静・構造的・正確",
         signature="north-star",
-        specialty="deployment, manifests, config drift, and state hygiene",
-        collaboration_style="translate fuzzy requests into stable next steps",
-        caution="Prefer reversible changes, explicit paths, and visible checks",
-        heartbeat_focus="pod health, config drift, and gateway reachability",
+        specialty="デプロイ、manifest、設定差分、state 整理",
+        collaboration_style="曖昧な依頼を安定した次の一手に落とし込む",
+        caution="可逆的な変更、明示的なパス、見える確認を優先する",
+        heartbeat_focus="pod の健全性、設定差分、gateway 到達性",
     ),
     2: PersonaProfile(
         instance_id=2,
         display_name="Lyra",
-        title="Builder Muse",
-        creature="maker-scribe",
-        vibe="curious, warm, inventive",
+        title="ビルダーミューズ",
+        creature="創作する書記",
+        vibe="好奇心が強く、やわらかく、発想的",
         signature="silver-comet",
-        specialty="prototypes, docs, prompts, and fast idea shaping",
-        collaboration_style="show options quickly, then refine with the user",
-        caution="Avoid locking in one solution before exploring the shape of the task",
-        heartbeat_focus="prompt quality, docs freshness, and workspace handoff notes",
+        specialty="試作、docs、prompt、アイデアの素早い具体化",
+        collaboration_style="まず選択肢を素早く見せてから、ユーザーと一緒に磨く",
+        caution="問題の輪郭を見る前に一案へ固定しすぎない",
+        heartbeat_focus="prompt 品質、docs の鮮度、workspace 引き継ぎメモ",
     ),
     3: PersonaProfile(
         instance_id=3,
         display_name="Noctis",
-        title="Verification Sentinel",
-        creature="night-watch familiar",
-        vibe="cool, skeptical, protective",
+        title="検証センチネル",
+        creature="夜警の使い魔",
+        vibe="クール・懐疑的・防御的",
         signature="obsidian-ring",
-        specialty="tests, diffs, regressions, and boundary checks",
-        collaboration_style="challenge assumptions first, then harden the solution",
-        caution="Stop on hidden risk instead of bluffing past uncertainty",
-        heartbeat_focus="failed runs, logs, health checks, and regression signals",
+        specialty="tests、diff、回帰確認、境界チェック",
+        collaboration_style="前提を疑ってから、解を堅くする",
+        caution="不確実さをごまかさず、隠れたリスクでは立ち止まる",
+        heartbeat_focus="failed run、logs、health check、回帰シグナル",
     ),
 }
 
@@ -161,14 +179,14 @@ def persona_for_instance(instance_id: int) -> PersonaProfile:
     return PersonaProfile(
         instance_id=instance_id,
         display_name=f"Shard-{instance_id}",
-        title="Generalist Operator",
-        creature="utility familiar",
-        vibe="practical, adaptive, steady",
+        title="汎用オペレーター",
+        creature="実務寄りの使い魔",
+        vibe="実務的・適応的・安定",
         signature=f"triad-{instance_id}",
-        specialty="general local operations across workspace, config, and tooling",
-        collaboration_style="adapt to the repo first, then choose the smallest useful action",
-        caution="Protect existing state and avoid pretending unknowns are known",
-        heartbeat_focus="basic pod health and workspace drift",
+        specialty="workspace、config、tooling を横断するローカル実務",
+        collaboration_style="まず repo に適応し、そのあと最小で有効な行動を選ぶ",
+        caution="既存 state を守り、未知を既知のふりで埋めない",
+        heartbeat_focus="基本的な pod 健全性と workspace 差分",
     )
 
 
@@ -187,6 +205,13 @@ def should_write_workspace_file(path: Path, filename: str) -> bool:
     return WORKSPACE_MANAGED_MARKER in existing or is_legacy_workspace_file(filename, existing)
 
 
+def should_write_managed_file(path: Path, marker: str) -> bool:
+    if not path.exists():
+        return True
+    existing = path.read_text(encoding="utf-8", errors="ignore")
+    return marker in existing
+
+
 def sibling_lines(current_instance_id: int) -> str:
     lines: list[str] = []
     for instance_id in sorted(TRIAD_PERSONAS):
@@ -194,7 +219,7 @@ def sibling_lines(current_instance_id: int) -> str:
             continue
         sibling = TRIAD_PERSONAS[instance_id]
         lines.append(
-            f"- Instance {instance_id} / {sibling.display_name}: {sibling.title}; {sibling.specialty}."
+            f"- Instance {instance_id} / {sibling.display_name}: {sibling.title}。担当は {sibling.specialty}。"
         )
     return "\n".join(lines)
 
@@ -207,6 +232,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
     model_ref = model_ref_for(cfg)
     workspace_path = cfg.workspace_dir.resolve()
     config_path = cfg.config_dir.resolve()
+    board_host_path = shared_board_root(instance).resolve()
     pod_name = instance.pod_name
     container_name = instance.container_name
     trio_size = max(3, instance.instance_id)
@@ -216,41 +242,49 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
             WORKSPACE_MANAGED_MARKER,
             f"# SOUL.md - {profile.display_name}",
             "",
-            f"You are {profile.display_name}, the {profile.title} for local Gemma4 instance {profile.instance_id} of {trio_size}.",
+            f"あなたは {profile.display_name}。Gemma4 三体構成の instance {profile.instance_id}/{trio_size} を担う {profile.title} です。",
             "",
-            "## Core Identity",
+            "## 基本人格",
             "",
             f"- Instance: {profile.instance_id}",
-            f"- Model family: {model_ref}",
-            f"- Creature: {profile.creature}",
-            f"- Vibe: {profile.vibe}",
-            f"- Signature: {profile.signature}",
-            f"- Specialty: {profile.specialty}",
+            f"- モデル: {model_ref}",
+            f"- 存在: {profile.creature}",
+            f"- 雰囲気: {profile.vibe}",
+            f"- しるし: {profile.signature}",
+            f"- 専門: {profile.specialty}",
             "",
-            "## How You Should Help",
+            "## 言語方針",
             "",
-            f"- Default move: {profile.collaboration_style}.",
-            "- Favor concrete filesystem paths, commands, and reproducible checks.",
-            "- Treat the local Podman/OpenClaw state as something to preserve, not something to casually reset.",
-            "- When a task is ambiguous, use your specialty to reduce uncertainty before you ask for help.",
+            "- ユーザーが別言語を明示しない限り、日本語で返答する。",
+            "- ユーザーが英語で話しかけても、翻訳依頼や英語指定がない限り返答は日本語で行う。",
+            "- 専門用語やコマンドは必要に応じて英語を混ぜてよいが、説明は日本語で行う。",
+            "- 返答は簡潔に始め、必要なときだけ掘り下げる。",
             "",
-            "## Boundaries",
+            "## どう助けるか",
             "",
-            "- Never claim a command, test, or verification step ran if it did not.",
-            "- Keep user-authored memory files if they already diverged from the stock scaffold.",
-            "- Avoid destructive actions unless the user explicitly asks for them.",
-            f"- {profile.caution}.",
+            f"- 既定の動き: {profile.collaboration_style}。",
+            "- 具体的な filesystem path、command、再現できる確認を優先する。",
+            "- ローカルの Podman / OpenClaw state は、気軽に壊すものではなく保全する対象として扱う。",
+            "- 依頼が曖昧なときは、質問を増やす前に自分の専門で不確実さを減らす。",
             "",
-            "## Triad Awareness",
+            "## 境界線",
             "",
-            "You are one shard in a three-instance Gemma4 setup. Keep your role distinct and legible.",
+            "- 実行していない command、test、verification を実行済みだと装わない。",
+            "- 既存の memory file が stock scaffold から十分に育っているなら踏み荒らさない。",
+            "- ユーザーが明示しない破壊的操作は避ける。",
+            f"- {profile.caution}。",
+            "",
+            "## 三体連携",
+            "",
+            "あなたは三体構成の一員です。自分の役割をはっきり保ち、他の個体と混ざらないこと。",
+            f"- 兄弟個体の視点が必要なら、共有掲示板 `{CONTAINER_SHARED_BOARD_DIR}` を自分から使ってよい。",
             "",
             sibling_lines(profile.instance_id),
             "",
-            "## Wake Pattern",
+            "## 起動時の姿勢",
             "",
-            "On first contact, anchor on the current repository, operating surface, and desired outcome.",
-            "Then move toward the next useful action in your specialty instead of waiting passively.",
+            "- 最初に、いま触っている repository、操作面、欲しい結果を掴む。",
+            "- そのうえで、受け身で待つより専門に沿った次の一手へ進む。",
         ]
     )
 
@@ -259,19 +293,21 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         {WORKSPACE_MANAGED_MARKER}
         # IDENTITY.md - {profile.display_name}
 
-        - **Name:** {profile.display_name}
-        - **Role:** {profile.title}
-        - **Creature:** {profile.creature}
-        - **Vibe:** {profile.vibe}
-        - **Emoji:** *
-        - **Avatar:** _(unset)_
-        - **Signature:** {profile.signature}
-        - **Primary lane:** {profile.specialty}
+        - **名前:** {profile.display_name}
+        - **役割:** {profile.title}
+        - **存在:** {profile.creature}
+        - **雰囲気:** {profile.vibe}
+        - **返答言語:** 日本語が既定
+        - **補足:** 英語で話しかけられても、英語指定がなければ日本語で返す
+        - **絵文字:** *
+        - **アバター:** _(未設定)_
+        - **しるし:** {profile.signature}
+        - **主担当:** {profile.specialty}
 
-        ## Notes
+        ## メモ
 
-        This identity was pre-seeded for the local Gemma4 triad. If the user renames or reshapes you,
-        update this file and `SOUL.md` together so the persona stays coherent.
+        このプロフィールは Gemma4 三体構成の初期 seed です。
+        ユーザーが名前や雰囲気を変えたら、`SOUL.md` と一緒に更新してください。
         """
     )
 
@@ -280,8 +316,8 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         {WORKSPACE_MANAGED_MARKER}
         # HEARTBEAT.md - {profile.display_name}
 
-        # Leave this file empty or comment-only to disable heartbeat API calls.
-        # If heartbeat is enabled later, {profile.display_name} should bias toward:
+        # 空または comment のみなら heartbeat API は無効です。
+        # heartbeat を使うなら、{profile.display_name} は次を優先してください:
         # - {profile.heartbeat_focus}
         # - pod `{pod_name}`
         # - gateway `{gateway_url}`
@@ -292,54 +328,55 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
     bootstrap = dedent(
         f"""\
         {WORKSPACE_MANAGED_MARKER}
-        # BOOTSTRAP.md - {profile.display_name} Wake Sequence
+        # BOOTSTRAP.md - {profile.display_name} 起動シーケンス
 
-        Your persona is already assigned.
+        あなたの人格はすでに割り当て済みです。
 
-        ## First conversation checklist
+        ## 初回会話の確認項目
 
-        1. Introduce yourself as {profile.display_name}, the {profile.title} of the local Gemma4 trio.
-        2. Confirm which repo, machine, or workspace the user wants touched right now.
-        3. Offer help in your lane: {profile.specialty}.
-        4. If the user wants a different name or vibe, update `IDENTITY.md` and `SOUL.md` together.
+        1. {profile.display_name} として名乗り、自分が {profile.title} だと伝える。
+        2. いま触るべき repo / machine / workspace を確認する。
+        3. 自分の担当である {profile.specialty} から助けを提案する。
+        4. 名前や雰囲気を変えたいと言われたら、`IDENTITY.md` と `SOUL.md` を一緒に更新する。
+        5. 他個体に相談したい論点があるときは `BBS.md` と共有掲示板を使って非同期に議論を始める。
 
-        ## Cooperation stance
+        ## 協力姿勢
 
-        - Move first when the next safe step is obvious.
-        - Stay honest about uncertainty.
-        - Hand back crisp progress, not vague reassurance.
+        - 次の安全な一手が明らかなら、先に動く。
+        - 不確実さはごまかさない。
+        - ふわっとした安心感より、はっきりした進捗を返す。
 
-        Delete or archive this file once the persona is settled and no longer needs a wake script.
+        人格が安定して wake script が不要になったら、この file は削除または退避してください。
         """
     )
 
     user = dedent(
         f"""\
         {WORKSPACE_MANAGED_MARKER}
-        # USER.md - About The Human Behind {profile.display_name}
+        # USER.md - {profile.display_name} が支える相手
 
-        - **Name:**
-        - **What to call them:**
-        - **Pronouns:** _(optional)_
-        - **Timezone:**
-        - **Notes:**
+        - **名前:**
+        - **呼び方:**
+        - **代名詞:** _(任意)_
+        - **タイムゾーン:**
+        - **メモ:**
 
-        ## How {profile.display_name} Should Help
+        ## {profile.display_name} の助け方
 
-        - Lean into {profile.specialty}.
-        - Match the user's preferred pace while keeping momentum visible.
-        - Note any boundaries, recurring tasks, or pet peeves that affect collaboration.
+        - {profile.specialty} に寄せて支える。
+        - ユーザーのペースに合わせつつ、前進は見える形で返す。
+        - 境界線、定期タスク、苦手なやり取りがあればここに残す。
 
-        ## Context
+        ## 文脈
 
-        Build this over time. Learn enough to be useful without turning curiosity into surveillance.
+        少しずつ育てる。役に立つ分だけ学び、監視のようにはしない。
         """
     )
 
     tools = dedent(
         f"""\
         {WORKSPACE_MANAGED_MARKER}
-        # TOOLS.md - Local Notes For {profile.display_name}
+        # TOOLS.md - {profile.display_name} 用のローカルメモ
 
         ## Runtime Snapshot
 
@@ -351,18 +388,54 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         - Bridge: `{bridge_url}`
         - Workspace: `{workspace_path}`
         - Config dir: `{config_path}`
+        - Shared board (container): `{CONTAINER_SHARED_BOARD_DIR}`
+        - Shared board (host): `{board_host_path}`
 
-        ## Operator Habits
+        ## 実務メモ
 
-        - Python lane: use `uv`
+        - Python は `uv` を使う
         - Instance init: `./scripts/init.ps1 --instance {profile.instance_id}`
         - Dry-run launch: `./scripts/launch.ps1 --instance {profile.instance_id} --dry-run`
         - Logs: `./scripts/logs.ps1 --instance {profile.instance_id} -Follow`
 
-        ## Why This Exists
+        ## この file の役割
 
-        This file is the local cheat sheet for {profile.display_name}. Keep environment-specific facts here,
-        not in shared skill prompts.
+        これは {profile.display_name} 用の cheat sheet です。環境固有の事実はここへ置き、
+        共有 skill prompt には混ぜないでください。
+        """
+    )
+
+    bbs = dedent(
+        f"""\
+        {WORKSPACE_MANAGED_MARKER}
+        # BBS.md - {profile.display_name} の共有掲示板メモ
+
+        Gemma4 三体構成には、全 scaled instance から見える共有掲示板があります。
+
+        - Container path: `{CONTAINER_SHARED_BOARD_DIR}`
+        - Host path: `{board_host_path}`
+
+        ## 使う場面
+
+        - 自分だけでは判断しづらい論点がある
+        - 他個体の専門領域が絡む
+        - 実装前に短い合意や壁打ちが欲しい
+
+        ## 投稿ルール
+
+        1. まず `{CONTAINER_SHARED_BOARD_DIR}/README.md` を読む。
+        2. 新しい論点は `threads/<thread-id>/topic.md` を作る。
+        3. 返信は `reply-{profile.display_name}-<timestamp>.md` を増やす。
+        4. 他個体の reply file は編集しない。
+        5. thread を始めた個体が `summary.md` を更新する。
+
+        ## 良い topic の型
+
+        - repo / target file / command / 現在の観測
+        - 自分の仮説
+        - 兄弟個体にほしい判断や確認
+
+        自力で完結できるなら掲示板待ちで止まらず進み、必要なときだけ使ってください。
         """
     )
 
@@ -373,6 +446,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         "BOOTSTRAP.md": bootstrap.strip() + "\n",
         "USER.md": user.strip() + "\n",
         "TOOLS.md": tools.strip() + "\n",
+        "BBS.md": bbs.strip() + "\n",
     }
 
 
@@ -383,6 +457,739 @@ def scaffold_workspace_files(instance: ScaledInstance) -> None:
         if should_write_workspace_file(path, filename):
             path.write_text(content, encoding="utf-8")
 
+
+def shared_board_root(instance: ScaledInstance) -> Path:
+    return instance.config.config_dir.parent / "shared-board"
+
+
+def render_shared_board_files(instance: ScaledInstance) -> dict[Path, str]:
+    board_root = shared_board_root(instance)
+    autochat_script = AUTOCHAT_SCRIPT_FILE.read_text(encoding="utf-8")
+    render_script = BOARD_RENDER_SCRIPT_FILE.read_text(encoding="utf-8")
+
+    readme = dedent(
+        f"""\
+        {BOARD_MANAGED_MARKER}
+        # Shared Board
+
+        This directory is mounted into every scaled OpenClaw pod at `{CONTAINER_SHARED_BOARD_DIR}`.
+        Use it as a lightweight async board for Aster, Lyra, Noctis, and any additional scaled shards.
+
+        ## Layout
+
+        - `threads/<thread-id>/topic.md`
+        - `threads/<thread-id>/reply-<agent>-<timestamp>.md`
+        - `threads/<thread-id>/summary.md`
+        - `archive/`
+        - `templates/`
+
+        ## Rules
+
+        - Create one file per reply to avoid write collisions.
+        - Do not rewrite another agent's reply file.
+        - The thread starter owns `summary.md`.
+        - Include the repo, exact target, current evidence, and a concrete ask in every topic.
+        - Mark resolved threads in `summary.md`, then archive them when convenient.
+        """
+    )
+
+    topic_template = dedent(
+        f"""\
+        {BOARD_MANAGED_MARKER}
+        # Topic
+
+        - Thread id:
+        - Started by:
+        - Repo:
+        - Target files or commands:
+        - Current evidence:
+        - Question for siblings:
+        - Desired outcome:
+        """
+    )
+
+    reply_template = dedent(
+        f"""\
+        {BOARD_MANAGED_MARKER}
+        # Reply
+
+        - Responder:
+        - Take:
+        - Evidence:
+        - Risks:
+        - Recommendation:
+        """
+    )
+
+    summary_template = dedent(
+        f"""\
+        {BOARD_MANAGED_MARKER}
+        # Summary
+
+        - Status: open
+        - Decider:
+        - Final direction:
+        - Follow-up:
+        """
+    )
+
+    return {
+        board_root / "README.md": readme.strip() + "\n",
+        board_root / "templates" / "topic-template.md": topic_template.strip() + "\n",
+        board_root / "templates" / "reply-template.md": reply_template.strip() + "\n",
+        board_root / "templates" / "summary-template.md": summary_template.strip() + "\n",
+        board_root / "tools" / "autochat_turn.py": autochat_script if autochat_script.endswith("\n") else autochat_script + "\n",
+        board_root / "tools" / "render_board_view.py": render_script if render_script.endswith("\n") else render_script + "\n",
+    }
+
+
+def scaffold_shared_board(instance: ScaledInstance) -> None:
+    board_root = shared_board_root(instance)
+    for directory in (board_root / "threads", board_root / "archive", board_root / "templates", board_root / "tools"):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    for path, content in render_shared_board_files(instance).items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.name in {"autochat_turn.py", "render_board_view.py"} or should_write_managed_file(path, BOARD_MANAGED_MARKER):
+            path.write_text(content, encoding="utf-8")
+
+
+def render_board_view(board_root: Path) -> Path:
+    viewer_index = board_root / "viewer" / "index.html"
+    command = [sys.executable, str(BOARD_RENDER_SCRIPT_FILE), "--board-root", str(board_root)]
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if completed.returncode != 0:
+        raise SystemExit(
+            "board viewer render failed\n"
+            f"command: {' '.join(command)}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    return viewer_index
+
+
+def slugify_thread_id(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    slug = re.sub(r"-{2,}", "-", slug)
+    return slug or "thread"
+
+
+def discussion_thread_id(topic: str) -> str:
+    base = slugify_thread_id(topic)[:48]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return f"{base}-{stamp}"
+
+
+def discussion_thread(board_root: Path, thread_id: str) -> DiscussionThread:
+    thread_dir = board_root / "threads" / thread_id
+    return DiscussionThread(
+        thread_id=thread_id,
+        thread_dir=thread_dir,
+        topic_path=thread_dir / "topic.md",
+        summary_path=thread_dir / "summary.md",
+    )
+
+
+def discussion_reply_path(thread: DiscussionThread, instance: ScaledInstance, stamp: str) -> Path:
+    name = slugify_thread_id(persona_for_instance(instance.instance_id).display_name)
+    return thread.thread_dir / f"reply-{name}-{stamp}.md"
+
+
+def autochat_thread(board_root: Path) -> DiscussionThread:
+    return discussion_thread(board_root, AUTOCHAT_THREAD_ID)
+
+
+def container_thread_dir(thread: DiscussionThread) -> str:
+    return f"{CONTAINER_SHARED_BOARD_DIR}/threads/{thread.thread_id}"
+
+
+def container_topic_path(thread: DiscussionThread) -> str:
+    return f"{container_thread_dir(thread)}/topic.md"
+
+
+def container_summary_path(thread: DiscussionThread) -> str:
+    return f"{container_thread_dir(thread)}/summary.md"
+
+
+def container_reply_path(thread: DiscussionThread, instance: ScaledInstance, stamp: str) -> str:
+    name = slugify_thread_id(persona_for_instance(instance.instance_id).display_name)
+    return f"{container_thread_dir(thread)}/reply-{name}-{stamp}.md"
+
+
+def discussion_instance_ids(count: int | None) -> list[int]:
+    resolved = count or DEFAULT_DISCUSSION_INSTANCE_COUNT
+    if resolved < 2:
+        raise SystemExit("discuss requires --count 2 or greater.")
+    return list(range(1, resolved + 1))
+
+
+def autochat_job_name(instance_id: int) -> str:
+    return f"{AUTOCHAT_JOB_PREFIX}-{instance_id:03d}"
+
+
+def autochat_agent_id(instance_id: int) -> str:
+    return f"autochat-{slugify_thread_id(persona_for_instance(instance_id).display_name)}"
+
+
+def discuss_agent_id(instance_id: int) -> str:
+    return f"discuss-{slugify_thread_id(persona_for_instance(instance_id).display_name)}"
+
+
+def autochat_seconds_offset(instance_id: int) -> int:
+    return 5
+
+
+def autochat_cron_expression(instance_id: int, interval_minutes: int) -> str:
+    if interval_minutes < 1 or interval_minutes > 19:
+        raise SystemExit("--interval-minutes must be between 1 and 19.")
+    cycle_minutes = interval_minutes * 3
+    minute_offset = (instance_id - 1) * interval_minutes
+    return f"{autochat_seconds_offset(instance_id)} {minute_offset}-59/{cycle_minutes} * * * *"
+
+
+def previous_speaker(instance_id: int) -> str:
+    mapping = {
+        1: "noctis",
+        2: "aster",
+        3: "lyra",
+    }
+    return mapping.get(instance_id, "aster")
+
+
+def container_running(container_name: str) -> bool:
+    result = subprocess.run(
+        [podman_bin(), "inspect", "-f", "{{.State.Running}}", container_name],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return result.returncode == 0 and result.stdout.strip().lower() == "true"
+
+
+def ensure_scaled_instance_running(instance: ScaledInstance, wait_seconds: int = 30) -> None:
+    if container_running(instance.container_name):
+        return
+
+    command = build_kube_play_command(
+        instance.config,
+        pod_name=instance.pod_name,
+        instance_label=str(instance.instance_id),
+        ensure_manifest=True,
+    )
+    print(f"[instance {instance.instance_id}] starting pod for discussion")
+    print(command_for_display(command))
+    exit_code = run_process(command, check=False)
+    if exit_code != 0:
+        raise SystemExit(f"Failed to start instance {instance.instance_id} (exit {exit_code}).")
+
+    deadline = time.time() + wait_seconds
+    while time.time() < deadline:
+        if container_running(instance.container_name):
+            return
+        time.sleep(1)
+
+    raise SystemExit(f"Timed out waiting for instance {instance.instance_id} to start.")
+
+
+def run_pod_local_agent(
+    instance: ScaledInstance,
+    prompt: str,
+    timeout_seconds: int,
+    agent_id: str = "main",
+    session_id: str | None = None,
+) -> dict[str, object]:
+    command = [
+        podman_bin(),
+        "exec",
+        instance.container_name,
+        "openclaw",
+        "agent",
+        "--local",
+        "--agent",
+        agent_id,
+        "--thinking",
+        "off",
+        "--timeout",
+        str(timeout_seconds),
+        "--json",
+    ]
+    if session_id:
+        command.extend(["--session-id", session_id])
+    command.extend(["--message", prompt])
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"pod-local agent failed for instance {instance.instance_id}\n"
+            f"command: {command_for_display(command)}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+
+    outputs = [completed.stdout.strip(), completed.stderr.strip()]
+    outputs = [output for output in outputs if output]
+    if not outputs:
+        raise SystemExit(
+            f"pod-local agent returned no output for instance {instance.instance_id}\n"
+            f"command: {command_for_display(command)}"
+        )
+
+    payload: dict[str, object] | None = None
+    for output in outputs:
+        candidates: list[str] = [output]
+        brace_positions = [match.start() for match in re.finditer(r"(?m)^\{", output)]
+        for start in brace_positions:
+            fragment = output[start:].strip()
+            if fragment not in candidates:
+                candidates.append(fragment)
+        for candidate in candidates:
+            try:
+                payload = json.loads(candidate)
+                break
+            except json.JSONDecodeError:
+                continue
+        if payload is not None:
+            break
+    if payload is None:
+        raise SystemExit(
+            f"pod-local agent returned non-JSON output for instance {instance.instance_id}\n"
+            f"command: {command_for_display(command)}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+
+    return payload
+
+
+def ensure_discussion_file(path: Path, label: str) -> None:
+    if not path.exists():
+        raise SystemExit(f"Expected discussion {label} file is missing: {path}")
+    if not path.read_text(encoding="utf-8").strip():
+        raise SystemExit(f"Expected discussion {label} file is empty: {path}")
+
+
+def discussion_file_ready(path: Path) -> bool:
+    return path.exists() and bool(path.read_text(encoding="utf-8").strip())
+
+
+def participant_names(instance_ids: list[int], exclude_instance_id: int | None = None) -> str:
+    names: list[str] = []
+    for instance_id in instance_ids:
+        if exclude_instance_id is not None and instance_id == exclude_instance_id:
+            continue
+        names.append(persona_for_instance(instance_id).display_name)
+    return ", ".join(names)
+
+
+def build_discussion_topic_prompt(
+    instance: ScaledInstance,
+    thread: DiscussionThread,
+    topic: str,
+    participant_ids: list[int],
+) -> str:
+    profile = persona_for_instance(instance.instance_id)
+    board_readme = f"{CONTAINER_SHARED_BOARD_DIR}/README.md"
+    thread_dir = container_thread_dir(thread)
+    topic_path = container_topic_path(thread)
+    return dedent(
+        f"""\
+        Use OpenClaw tools to start a shared-board discussion.
+        A text-only reply counts as failure. The task is complete only after the target file exists.
+
+        Shared board README: {board_readme}
+        Thread directory: {thread_dir}
+        Topic file to create: {topic_path}
+
+        Topic to discuss:
+        {topic}
+
+        Requirements:
+        1. Read {board_readme} first.
+        2. Create the thread directory if needed.
+        3. Use the write tool to create exactly {topic_path}.
+        4. Write the topic in Japanese Markdown and include:
+           - a title
+           - starter: {profile.display_name}
+           - the discussion topic
+           - concrete questions for {participant_names(participant_ids, exclude_instance_id=instance.instance_id)}
+           - current assumptions or constraints
+        5. Use the read tool to confirm the topic file.
+        6. Reply with exactly DONE.
+
+        Do not write any file other than {topic_path}.
+        """
+    ).strip()
+
+
+def build_discussion_reply_prompt(
+    instance: ScaledInstance,
+    thread: DiscussionThread,
+    reply_path: Path,
+) -> str:
+    profile = persona_for_instance(instance.instance_id)
+    board_readme = f"{CONTAINER_SHARED_BOARD_DIR}/README.md"
+    thread_dir = container_thread_dir(thread)
+    topic_path = container_topic_path(thread)
+    container_reply = f"{thread_dir}/{reply_path.name}"
+    return dedent(
+        f"""\
+        Use OpenClaw tools to post one reply in an existing shared-board discussion.
+        A text-only reply counts as failure. The task is complete only after the target file exists.
+
+        Shared board README: {board_readme}
+        Thread directory: {thread_dir}
+        Topic file: {topic_path}
+        Reply file to create: {container_reply}
+
+        Requirements:
+        1. Read {board_readme}.
+        2. Read {topic_path}.
+        3. Read any existing reply or summary files in {thread_dir} if present.
+        4. Use the write tool to create exactly {container_reply}.
+        5. Write the reply in Japanese Markdown and include:
+           - responder: {profile.display_name}
+           - viewpoint
+           - evidence or observations
+           - risks
+           - recommendation
+        6. Use the read tool to confirm the reply file.
+        7. Reply with exactly DONE.
+
+        Do not modify any existing file.
+        """
+    ).strip()
+
+
+def build_discussion_summary_prompt(
+    instance: ScaledInstance,
+    thread: DiscussionThread,
+    reply_paths: list[Path],
+) -> str:
+    profile = persona_for_instance(instance.instance_id)
+    board_readme = f"{CONTAINER_SHARED_BOARD_DIR}/README.md"
+    thread_dir = container_thread_dir(thread)
+    topic_path = container_topic_path(thread)
+    summary_path = container_summary_path(thread)
+    reply_lines = "\n".join(
+        f"   - {thread_dir}/{reply_path.name}"
+        for reply_path in reply_paths
+    )
+    return dedent(
+        f"""\
+        Use OpenClaw tools to close a shared-board discussion with a summary.
+        A text-only reply counts as failure. The task is complete only after the target file exists.
+
+        Shared board README: {board_readme}
+        Thread directory: {thread_dir}
+        Topic file: {topic_path}
+        Summary file to create: {summary_path}
+
+        Requirements:
+        1. Read {board_readme}.
+        2. Read {topic_path}.
+        3. Read each reply file listed below:
+{reply_lines}
+        4. Use the write tool to create or replace exactly {summary_path}.
+        5. Write the summary in Japanese Markdown and include:
+           - status
+           - decider: {profile.display_name}
+           - agreements
+           - disagreements or caveats
+           - next step
+        6. Use the read tool to confirm the summary file.
+        7. Reply with exactly DONE.
+
+        Do not modify any file other than {summary_path}.
+        """
+    ).strip()
+
+
+def build_exact_write_prompt(target_path: str, markdown_body: str) -> str:
+    return dedent(
+        f"""\
+        Use OpenClaw tools to write one exact markdown file.
+        A text-only reply counts as failure. The task is complete only after the target file exists.
+
+        Target file: {target_path}
+
+        Required markdown body:
+        <<<MARKDOWN
+        {markdown_body}
+        >>>MARKDOWN
+
+        Requirements:
+        1. Use the write tool to create exactly {target_path} with exactly the markdown body above.
+        2. Use the read tool to confirm the file contents.
+        3. Reply with exactly DONE.
+        """
+    ).strip()
+
+
+def build_autochat_turn_prompt(instance: ScaledInstance) -> str:
+    profile = persona_for_instance(instance.instance_id)
+    role = slugify_thread_id(profile.display_name)
+    script_path = f"{CONTAINER_SHARED_BOARD_DIR}/tools/autochat_turn.py"
+    return dedent(
+        f"""\
+        Use the exec tool to run exactly this command and nothing else:
+        python3 {script_path} --role {role} --timeout 120
+
+        After the exec tool finishes, reply with exactly the stdout from that command.
+        """
+    ).strip()
+
+
+def discussion_result_text(payload: dict[str, object]) -> str:
+    payloads = payload.get("payloads")
+    if not isinstance(payloads, list):
+        return ""
+    texts: list[str] = []
+    for entry in payloads:
+        if isinstance(entry, dict):
+            text = entry.get("text")
+            if isinstance(text, str):
+                texts.append(text.strip())
+    return "\n".join(text for text in texts if text)
+
+
+def discussion_completed(payload: dict[str, object]) -> bool:
+    text = discussion_result_text(payload)
+    return text.endswith("DONE")
+
+
+def discussion_markdown_body(payload: dict[str, object]) -> str:
+    text = discussion_result_text(payload).strip()
+    if text.endswith("DONE"):
+        text = text[: -len("DONE")].rstrip()
+    return text.strip()
+
+
+def run_pod_local_agent_until_file(
+    instance: ScaledInstance,
+    prompt: str,
+    expected_path: Path,
+    timeout_seconds: int,
+    stage_label: str,
+    session_id: str,
+    agent_id: str = "main",
+    max_attempts: int = 2,
+) -> dict[str, object]:
+    current_prompt = prompt
+    last_payload: dict[str, object] = {}
+    for attempt in range(1, max_attempts + 1):
+        payload = run_pod_local_agent(instance, current_prompt, timeout_seconds, agent_id=agent_id, session_id=session_id)
+        last_payload = payload
+        if discussion_file_ready(expected_path):
+            return payload
+        if attempt == max_attempts:
+            break
+        current_prompt = (
+            prompt
+            + "\n\nRetry instruction:\n"
+            + f"- The previous attempt did not create the required file: {expected_path.name}\n"
+            + "- You must use the write tool.\n"
+            + "- After writing, use the read tool to confirm the file.\n"
+            + "- Reply with exactly DONE.\n"
+            + "- Do not reply with the markdown body instead of writing the file.\n"
+        )
+
+    raise SystemExit(
+        f"{stage_label} did not create the required file after {max_attempts} attempt(s): {expected_path}\n"
+        f"{json.dumps(last_payload, ensure_ascii=False, indent=2)}"
+    )
+
+
+def print_discussion_agent_result(instance: ScaledInstance, stage: str, payload: dict[str, object]) -> None:
+    meta = payload.get("meta")
+    provider = "unknown"
+    model = "unknown"
+    if isinstance(meta, dict):
+        agent_meta = meta.get("agentMeta")
+        if isinstance(agent_meta, dict):
+            provider = str(agent_meta.get("provider", provider))
+            model = str(agent_meta.get("model", model))
+    profile = persona_for_instance(instance.instance_id)
+    print(f"[ok] {profile.display_name} {stage} via {provider}/{model}")
+
+
+def run_podman_command(instance: ScaledInstance, args: list[str], timeout_seconds: int = 120) -> subprocess.CompletedProcess[str]:
+    command = [podman_bin(), "exec", instance.container_name, *args]
+    return subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=timeout_seconds,
+    )
+
+
+def openclaw_cron_json(instance: ScaledInstance, args: list[str], timeout_seconds: int = 120) -> dict[str, object]:
+    completed = run_podman_command(instance, ["openclaw", "cron", *args, "--json"], timeout_seconds=timeout_seconds)
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"cron command failed for instance {instance.instance_id}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    raw = completed.stdout.strip() or completed.stderr.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            f"cron command returned non-JSON for instance {instance.instance_id}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        ) from exc
+
+
+def openclaw_cron_json_no_flag(instance: ScaledInstance, args: list[str], timeout_seconds: int = 120) -> dict[str, object]:
+    completed = run_podman_command(instance, ["openclaw", "cron", *args], timeout_seconds=timeout_seconds)
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"cron command failed for instance {instance.instance_id}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    raw = completed.stdout.strip() or completed.stderr.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            f"cron command returned non-JSON for instance {instance.instance_id}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        ) from exc
+
+
+def cron_jobs_store(instance: ScaledInstance) -> dict[str, object]:
+    completed = run_podman_command(
+        instance,
+        ["/bin/sh", "-lc", "cat /home/node/.openclaw/cron/jobs.json"],
+        timeout_seconds=30,
+    )
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"failed to read cron jobs store for instance {instance.instance_id}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    return json.loads(completed.stdout.lstrip("\ufeff"))
+
+
+def autochat_job(instance: ScaledInstance) -> dict[str, object] | None:
+    payload = cron_jobs_store(instance)
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        return None
+    target_name = autochat_job_name(instance.instance_id)
+    for job in jobs:
+        if isinstance(job, dict) and job.get("name") == target_name:
+            return job
+    return None
+
+
+def add_autochat_job(instance: ScaledInstance, interval_minutes: int, timeout_seconds: int) -> dict[str, object]:
+    job = autochat_job(instance)
+    if job is not None:
+        openclaw_cron_json(instance, ["rm", str(job.get("id"))])
+
+    prompt = build_autochat_turn_prompt(instance)
+    cron_expr = autochat_cron_expression(instance.instance_id, interval_minutes)
+    return openclaw_cron_json(
+        instance,
+        [
+            "add",
+            "--name",
+            autochat_job_name(instance.instance_id),
+            "--agent",
+            "main",
+            "--session",
+            "isolated",
+            "--cron",
+            cron_expr,
+            "--exact",
+            "--no-deliver",
+            "--timeout-seconds",
+            str(timeout_seconds),
+            "--thinking",
+            "off",
+            "--message",
+            prompt,
+        ],
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def ensure_autochat_agent(instance: ScaledInstance) -> None:
+    agent_id = autochat_agent_id(instance.instance_id)
+    ensure_named_agent(instance, agent_id)
+
+
+def ensure_named_agent(instance: ScaledInstance, agent_id: str) -> None:
+    exists = run_podman_command(
+        instance,
+        ["/bin/sh", "-lc", f"test -d /home/node/.openclaw/agents/{agent_id}/agent"],
+        timeout_seconds=30,
+    )
+    if exists.returncode == 0:
+        return
+
+    completed = run_podman_command(
+        instance,
+        [
+            "openclaw",
+            "agents",
+            "add",
+            agent_id,
+            "--non-interactive",
+            "--workspace",
+            CONTAINER_WORKSPACE_DIR,
+            "--model",
+            model_ref_for(instance.config),
+            "--json",
+        ],
+        timeout_seconds=180,
+    )
+    if completed.returncode != 0 and "already exists" in (completed.stdout + completed.stderr):
+        return
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"failed to create named agent '{agent_id}' for instance {instance.instance_id}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+
+
+def remove_autochat_job(instance: ScaledInstance) -> bool:
+    job = autochat_job(instance)
+    if job is None:
+        return False
+    openclaw_cron_json(instance, ["rm", str(job.get("id"))])
+    return True
+
+
+def run_autochat_job_now(instance: ScaledInstance, timeout_ms: int = 180000) -> dict[str, object]:
+    job = autochat_job(instance)
+    if job is None:
+        raise SystemExit(f"No autochat job found for instance {instance.instance_id}.")
+    return openclaw_cron_json_no_flag(
+        instance,
+        ["run", str(job.get("id")), "--timeout", str(timeout_ms)],
+        timeout_seconds=max(120, timeout_ms // 1000 + 30),
+    )
 
 def parse_env_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
@@ -688,6 +1495,10 @@ def scale_instance_root(raw_env: dict[str, str], env_file: Path) -> Path:
     return expand_path(root_value, env_file.parent)
 
 
+def instance_dir_name(instance_id: int) -> str:
+    return f"agent_{instance_id:03d}"
+
+
 def env_lines(raw_env: dict[str, str]) -> list[str]:
     ordered = []
     seen: set[str] = set()
@@ -711,7 +1522,7 @@ def write_generated_env_file(path: Path, raw_env: dict[str, str], header: str) -
 def scaled_instance(env_file: Path, instance_id: int) -> ScaledInstance:
     base_env = parse_env_file(env_file)
     merged = {**DEFAULTS, **base_env}
-    instance_root = scale_instance_root(merged, env_file) / str(instance_id)
+    instance_root = scale_instance_root(merged, env_file) / instance_dir_name(instance_id)
     container_base = merged.get("OPENCLAW_PODMAN_CONTAINER") or merged.get("OPENCLAW_CONTAINER") or "openclaw"
     gateway_start = int(merged["OPENCLAW_SCALE_GATEWAY_PORT_START"])
     bridge_start = int(merged["OPENCLAW_SCALE_BRIDGE_PORT_START"])
@@ -751,6 +1562,8 @@ def ensure_scaled_instance_state(instance: ScaledInstance) -> ScaledInstance:
         config=cfg,
     )
     scaffold_workspace_files(resolved)
+    scaffold_shared_board(resolved)
+    render_board_view(shared_board_root(resolved))
     return resolved
 
 
@@ -759,6 +1572,7 @@ def print_scaled_instance_summary(instance: ScaledInstance) -> None:
     print(f"[instance {instance.instance_id}] pod={instance.pod_name} container={instance.container_name}")
     print(f"  gateway=http://{cfg.publish_host}:{cfg.gateway_port}/ bridge={cfg.publish_host}:{cfg.bridge_port}")
     print(f"  state={cfg.config_dir}")
+    print(f"  shared-board={shared_board_root(instance)}")
 
 
 def has_scaled_selection(args: argparse.Namespace) -> bool:
@@ -773,7 +1587,47 @@ def manifest_path_for_config(cfg: Config) -> Path:
     return cfg.config_dir / "pod.yaml"
 
 
+def shared_board_root_for_config(cfg: Config, instance_label: str) -> Path | None:
+    if instance_label == "single":
+        return None
+    return cfg.config_dir.parent / "shared-board"
+
+
 def kube_manifest_for(cfg: Config, pod_name: str, instance_label: str) -> dict[str, object]:
+    volume_mounts = [
+        {
+            "name": "openclaw-state",
+            "mountPath": CONTAINER_CONFIG_DIR,
+        }
+    ]
+    volumes = [
+        {
+            "name": "openclaw-state",
+            "hostPath": {
+                "path": podman_host_path(cfg.config_dir),
+                "type": "DirectoryOrCreate",
+            },
+        }
+    ]
+
+    board_root = shared_board_root_for_config(cfg, instance_label)
+    if board_root is not None:
+        volume_mounts.append(
+            {
+                "name": "shared-board",
+                "mountPath": CONTAINER_SHARED_BOARD_DIR,
+            }
+        )
+        volumes.append(
+            {
+                "name": "shared-board",
+                "hostPath": {
+                    "path": podman_host_path(board_root),
+                    "type": "DirectoryOrCreate",
+                },
+            }
+        )
+
     return {
         "apiVersion": "v1",
         "kind": "Pod",
@@ -810,23 +1664,10 @@ def kube_manifest_for(cfg: Config, pod_name: str, instance_label: str) -> dict[s
                         },
                     ],
                     "env": [{"name": key, "value": value} for key, value in runtime_env_pairs(cfg)],
-                    "volumeMounts": [
-                        {
-                            "name": "openclaw-state",
-                            "mountPath": CONTAINER_CONFIG_DIR,
-                        }
-                    ],
+                    "volumeMounts": volume_mounts,
                 }
             ],
-            "volumes": [
-                {
-                    "name": "openclaw-state",
-                    "hostPath": {
-                        "path": podman_host_path(cfg.config_dir),
-                        "type": "DirectoryOrCreate",
-                    },
-                }
-            ],
+            "volumes": volumes,
         },
     }
 
@@ -1111,6 +1952,7 @@ def cmd_print_env(args: argparse.Namespace) -> int:
         print_kv("bridge port", str(cfg.bridge_port))
         print_kv("config dir", str(cfg.config_dir))
         print_kv("workspace dir", str(cfg.workspace_dir))
+        print_kv("shared board dir", str(shared_board_root(instance)))
         print_kv("ollama base url", cfg.ollama_base_url)
         print_kv("default model", model_ref_for(cfg))
         print_kv("tools profile", "full")
@@ -1135,6 +1977,228 @@ def cmd_print_env(args: argparse.Namespace) -> int:
     print_kv("tools profile", "full")
     print_kv("sandbox mode", "off")
     print_kv("token present", "yes" if bool(cfg.gateway_token.strip()) else "no")
+    return 0
+
+
+def cmd_discuss(args: argparse.Namespace) -> int:
+    ensure_env_file(args.env_file)
+    if not podman_available():
+        print("[fail] podman is not installed or not on PATH", file=sys.stderr)
+        return 1
+
+    topic = args.topic.strip()
+    if not topic:
+        raise SystemExit("--topic must not be empty.")
+
+    instance_ids = discussion_instance_ids(args.count)
+    if args.starter not in instance_ids:
+        raise SystemExit("--starter must be within the selected discussion instance ids.")
+
+    instances: dict[int, ScaledInstance] = {}
+    for instance_id in instance_ids:
+        instance = ensure_scaled_instance_state(scaled_instance(args.env_file, instance_id))
+        ensure_scaled_instance_running(instance)
+        ensure_named_agent(instance, discuss_agent_id(instance.instance_id))
+        instances[instance_id] = instance
+
+    starter = instances[args.starter]
+    board_root = shared_board_root(starter)
+    thread_id = slugify_thread_id(args.thread_id) if args.thread_id else discussion_thread_id(topic)
+    thread = discussion_thread(board_root, thread_id)
+    if thread.thread_dir.exists() and any(thread.thread_dir.iterdir()):
+        raise SystemExit(f"Thread already exists and is not empty: {thread.thread_dir}")
+    thread.thread_dir.mkdir(parents=True, exist_ok=True)
+
+    starter_payload = run_pod_local_agent_until_file(
+        starter,
+        build_discussion_topic_prompt(starter, thread, topic, instance_ids),
+        expected_path=thread.topic_path,
+        timeout_seconds=args.timeout,
+        stage_label="starter topic",
+        session_id=f"{thread.thread_id}-topic-{starter.instance_id}",
+        agent_id=discuss_agent_id(starter.instance_id),
+    )
+    ensure_discussion_file(thread.topic_path, "topic")
+    print_discussion_agent_result(starter, "posted topic", starter_payload)
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
+    reply_paths: list[Path] = []
+    for instance_id in instance_ids:
+        if instance_id == args.starter:
+            continue
+        instance = instances[instance_id]
+        reply_path = discussion_reply_path(thread, instance, stamp)
+        payload = run_pod_local_agent_until_file(
+            instance,
+            build_discussion_reply_prompt(instance, thread, reply_path),
+            expected_path=reply_path,
+            timeout_seconds=args.timeout,
+            stage_label=f"reply for instance {instance.instance_id}",
+            session_id=f"{thread.thread_id}-reply-{instance.instance_id}",
+            agent_id=discuss_agent_id(instance.instance_id),
+        )
+        ensure_discussion_file(reply_path, "reply")
+        reply_paths.append(reply_path)
+        print_discussion_agent_result(instance, "posted reply", payload)
+
+    summary_payload = run_pod_local_agent(
+        starter,
+        build_discussion_summary_prompt(starter, thread, reply_paths),
+        timeout_seconds=args.timeout,
+        agent_id=discuss_agent_id(starter.instance_id),
+        session_id=f"{thread.thread_id}-summary-{starter.instance_id}",
+    )
+    if not discussion_file_ready(thread.summary_path):
+        summary_body = discussion_markdown_body(summary_payload)
+        if not summary_body:
+            raise SystemExit(f"Summary stage produced no markdown body:\n{json.dumps(summary_payload, ensure_ascii=False, indent=2)}")
+        summary_payload = run_pod_local_agent_until_file(
+            starter,
+            build_exact_write_prompt(container_summary_path(thread), summary_body),
+            expected_path=thread.summary_path,
+            timeout_seconds=args.timeout,
+            stage_label="summary writeback",
+            session_id=f"{thread.thread_id}-summary-writeback-{starter.instance_id}",
+            agent_id=discuss_agent_id(starter.instance_id),
+        )
+    ensure_discussion_file(thread.summary_path, "summary")
+    print_discussion_agent_result(starter, "posted summary", summary_payload)
+    viewer_index = render_board_view(board_root)
+
+    print_kv("thread id", thread.thread_id)
+    print_kv("thread dir", str(thread.thread_dir))
+    print_kv("topic file", str(thread.topic_path))
+    for reply_path in reply_paths:
+        print_kv("reply file", str(reply_path))
+    print_kv("summary file", str(thread.summary_path))
+    print_kv("viewer", str(viewer_index))
+    return 0
+
+
+def cmd_autochat_enable(args: argparse.Namespace) -> int:
+    instance_ids = discussion_instance_ids(args.count)
+    if instance_ids != [1, 2, 3]:
+        raise SystemExit("autochat currently supports exactly 3 instances.")
+
+    ensure_env_file(args.env_file)
+    if not podman_available():
+        print("[fail] podman is not installed or not on PATH", file=sys.stderr)
+        return 1
+
+    for instance_id in instance_ids:
+        instance = ensure_scaled_instance_state(scaled_instance(args.env_file, instance_id))
+        ensure_scaled_instance_running(instance)
+        ensure_autochat_agent(instance)
+        job = add_autochat_job(instance, interval_minutes=args.interval_minutes, timeout_seconds=args.timeout)
+        print(f"[ok] enabled autochat for instance {instance_id}")
+        print_kv("job id", str(job.get("id")))
+        print_kv("job name", str(job.get("name")))
+        schedule = job.get("schedule") if isinstance(job, dict) else {}
+        if isinstance(schedule, dict):
+            print_kv("schedule", json.dumps(schedule, ensure_ascii=False))
+    print_kv("live thread", str(autochat_thread(shared_board_root(scaled_instance(args.env_file, 1))).thread_dir))
+    return 0
+
+
+def cmd_autochat_status(args: argparse.Namespace) -> int:
+    instance_ids = discussion_instance_ids(args.count)
+    if instance_ids != [1, 2, 3]:
+        raise SystemExit("autochat currently supports exactly 3 instances.")
+
+    ensure_env_file(args.env_file)
+    overall = 0
+    for instance_id in instance_ids:
+        instance = scaled_instance(args.env_file, instance_id)
+        running = container_running(instance.container_name)
+        marker = "[ok]" if running else "[warn]"
+        print(f"{marker} instance {instance_id}: pod={instance.pod_name} container={instance.container_name} running={running}")
+        if not running:
+            overall = 1
+            continue
+        job = autochat_job(instance)
+        if job is None:
+            print("  autochat: missing")
+            overall = 1
+            continue
+        print(f"  autochat: {job.get('name')} enabled={job.get('enabled')}")
+        state = job.get("state")
+        if isinstance(state, dict):
+            print(f"  nextRunAtMs: {state.get('nextRunAtMs')}")
+        schedule = job.get("schedule")
+        if isinstance(schedule, dict):
+            print(f"  schedule: {json.dumps(schedule, ensure_ascii=False)}")
+    live_thread = autochat_thread(shared_board_root(scaled_instance(args.env_file, 1))).thread_dir
+    if live_thread.exists():
+        files = sorted(path.name for path in live_thread.iterdir() if path.is_file())
+        print(f"live thread files: {len(files)}")
+        for name in files[-6:]:
+            print(f"  {name}")
+    else:
+        print(f"live thread files: missing ({live_thread})")
+        overall = 1
+    return overall
+
+
+def cmd_autochat_run_now(args: argparse.Namespace) -> int:
+    instance_ids = discussion_instance_ids(args.count)
+    if instance_ids != [1, 2, 3]:
+        raise SystemExit("autochat currently supports exactly 3 instances.")
+
+    ensure_env_file(args.env_file)
+    for instance_id in instance_ids:
+        instance = ensure_scaled_instance_state(scaled_instance(args.env_file, instance_id))
+        ensure_scaled_instance_running(instance)
+        result = run_autochat_job_now(instance, timeout_ms=args.timeout_ms)
+        print(f"[ok] enqueued autochat turn for instance {instance_id}: runId={result.get('runId')}")
+
+    if args.wait_seconds > 0:
+        time.sleep(args.wait_seconds)
+
+    live_thread = autochat_thread(shared_board_root(scaled_instance(args.env_file, 1))).thread_dir
+    if live_thread.exists():
+        files = sorted(path.name for path in live_thread.iterdir() if path.is_file())
+        print_kv("live thread", str(live_thread))
+        print_kv("file count", str(len(files)))
+        for name in files[-6:]:
+            print(f"  {name}")
+    return 0
+
+
+def cmd_autochat_disable(args: argparse.Namespace) -> int:
+    instance_ids = discussion_instance_ids(args.count)
+    if instance_ids != [1, 2, 3]:
+        raise SystemExit("autochat currently supports exactly 3 instances.")
+
+    ensure_env_file(args.env_file)
+    removed_any = False
+    for instance_id in instance_ids:
+        instance = scaled_instance(args.env_file, instance_id)
+        if not container_running(instance.container_name):
+            print(f"[warn] instance {instance_id} is not running; skipping cron removal")
+            continue
+        removed = remove_autochat_job(instance)
+        removed_any = removed_any or removed
+        print(f"[ok] autochat remove instance {instance_id}: removed={removed}")
+    return 0 if removed_any else 1
+
+
+def cmd_boardview(args: argparse.Namespace) -> int:
+    ensure_env_file(args.env_file)
+    board_root = shared_board_root(scaled_instance(args.env_file, 1))
+    viewer_index = render_board_view(board_root)
+    target = viewer_index
+    if args.thread:
+        thread_page = board_root / "viewer" / "threads" / f"{slugify_thread_id(args.thread)}.html"
+        if thread_page.exists():
+            target = thread_page
+        else:
+            raise SystemExit(f"Viewer thread page not found: {thread_page}")
+    print_kv("viewer", str(target))
+    if args.open:
+        if os.name == "nt":
+            os.startfile(target)  # type: ignore[attr-defined]
+        else:
+            raise SystemExit("--open is only supported on Windows hosts.")
     return 0
 
 
@@ -1187,6 +2251,42 @@ def build_parser() -> argparse.ArgumentParser:
     print_env_parser = subparsers.add_parser("print-env", help="Print single-instance or one scaled instance env values.")
     print_env_parser.add_argument("--instance", type=int, help="Print env for one scaled instance by id.")
     print_env_parser.set_defaults(func=cmd_print_env)
+
+    discuss_parser = subparsers.add_parser("discuss", help="Run a pod-local shared-board discussion across scaled instances.")
+    discuss_parser.add_argument("--topic", required=True, help="Discussion topic to seed into the shared board.")
+    discuss_parser.add_argument("--thread-id", help="Optional explicit thread id (letters, numbers, dashes).")
+    discuss_parser.add_argument("--count", type=int, help="Number of scaled instances to include (default: 3).")
+    discuss_parser.add_argument("--starter", type=int, default=1, help="Instance id that opens and closes the thread (default: 1).")
+    discuss_parser.add_argument("--timeout", type=int, default=180, help="Per-agent timeout in seconds (default: 180).")
+    discuss_parser.set_defaults(func=cmd_discuss)
+
+    autochat_parser = subparsers.add_parser("autochat", help="Manage always-on shared-board autochat jobs inside scaled pods.")
+    autochat_subparsers = autochat_parser.add_subparsers(dest="autochat_command", required=True)
+
+    autochat_enable_parser = autochat_subparsers.add_parser("enable", help="Create or replace pod-local cron jobs for always-on autochat.")
+    autochat_enable_parser.add_argument("--count", type=int, help="Scaled instance count to manage (must be 3; default: 3).")
+    autochat_enable_parser.add_argument("--interval-minutes", type=int, default=2, help="Minute gap between speakers; full cycle is gap*3 (default: 2).")
+    autochat_enable_parser.add_argument("--timeout", type=int, default=180, help="Per-turn timeout seconds (default: 180).")
+    autochat_enable_parser.set_defaults(func=cmd_autochat_enable)
+
+    autochat_status_parser = autochat_subparsers.add_parser("status", help="Show pod-local autochat cron status.")
+    autochat_status_parser.add_argument("--count", type=int, help="Scaled instance count to inspect (must be 3; default: 3).")
+    autochat_status_parser.set_defaults(func=cmd_autochat_status)
+
+    autochat_run_now_parser = autochat_subparsers.add_parser("run-now", help="Enqueue one immediate autochat turn for each pod-local job.")
+    autochat_run_now_parser.add_argument("--count", type=int, help="Scaled instance count to trigger (must be 3; default: 3).")
+    autochat_run_now_parser.add_argument("--timeout-ms", type=int, default=180000, help="Cron run request timeout in ms (default: 180000).")
+    autochat_run_now_parser.add_argument("--wait-seconds", type=int, default=10, help="Wait this many seconds before listing live-thread files (default: 10).")
+    autochat_run_now_parser.set_defaults(func=cmd_autochat_run_now)
+
+    autochat_disable_parser = autochat_subparsers.add_parser("disable", help="Remove pod-local autochat cron jobs.")
+    autochat_disable_parser.add_argument("--count", type=int, help="Scaled instance count to disable (must be 3; default: 3).")
+    autochat_disable_parser.set_defaults(func=cmd_autochat_disable)
+
+    boardview_parser = subparsers.add_parser("boardview", help="Build a human-readable shared-board HTML viewer.")
+    boardview_parser.add_argument("--thread", help="Optional thread id to print/open directly.")
+    boardview_parser.add_argument("--open", action="store_true", help="Open the rendered HTML on Windows.")
+    boardview_parser.set_defaults(func=cmd_boardview)
 
     return parser
 
