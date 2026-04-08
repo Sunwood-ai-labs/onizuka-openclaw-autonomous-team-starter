@@ -42,6 +42,12 @@ Default ports:
 - Instance 2: `127.0.0.1:18791`
 - Instance 3: `127.0.0.1:18793`
 
+Directory layout:
+
+- `.openclaw/instances/agent_001`
+- `.openclaw/instances/agent_002`
+- `.openclaw/instances/agent_003`
+
 Default Gemma4 triad personas:
 
 - Instance 1 / `Aster`: systems lead

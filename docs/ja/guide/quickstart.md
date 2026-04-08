@@ -42,5 +42,11 @@ Gemma4 3体の初期人格:
 - Instance 2 / `Lyra`: builder muse
 - Instance 3 / `Noctis`: verification sentinel
 
+繝・ぅ繝ｬ繧ｯ繝医Μ:
+
+- `.openclaw/instances/agent_001`
+- `.openclaw/instances/agent_002`
+- `.openclaw/instances/agent_003`
+
 `init --count 3` で各 instance workspace に `SOUL.md`, `IDENTITY.md`,
 `HEARTBEAT.md`, `BOOTSTRAP.md`, `USER.md`, `TOOLS.md` を配置します。

@@ -17,9 +17,9 @@ TOPIC_PATH = THREAD_DIR / "topic.md"
 VIEWER_SCRIPT = BOARD_ROOT / "tools" / "render_board_view.py"
 
 DISPLAY = {
-    "aster": "伊織",
-    "lyra": "紬",
-    "noctis": "朔",
+    "aster": "いおり",
+    "lyra": "つむぎ",
+    "noctis": "さく",
 }
 
 PREVIOUS = {

@@ -88,6 +88,12 @@ podman kube play --replace --no-pod-prefix .\.openclaw\pod.yaml
 - `pod.yaml`
 - `workspace/`
 
+scaled instance 縺ｮ繝・ぅ繝ｬ繧ｯ繝医Μ縺ｯ `agent_001` 蠖｢蠑上〒逕滓・縺輔ｌ縺ｾ縺吶・
+
+- `.openclaw/instances/agent_001`
+- `.openclaw/instances/agent_002`
+- `.openclaw/instances/agent_003`
+
 Gemma4 3体の初期人格もここで生成されます。
 
 - Instance 1 / `Aster`: systems lead

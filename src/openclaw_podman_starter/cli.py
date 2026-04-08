@@ -132,7 +132,7 @@ TRIAD_PERSONAS = {
     1: PersonaProfile(
         instance_id=1,
         slug="aster",
-        display_name="伊織",
+        display_name="いおり",
         title="段取り番",
         creature="現場好きのまとめ役",
         vibe="落ち着いてるけどフランク",
@@ -145,7 +145,7 @@ TRIAD_PERSONAS = {
     2: PersonaProfile(
         instance_id=2,
         slug="lyra",
-        display_name="紬",
+        display_name="つむぎ",
         title="ひらめき係",
         creature="しゃべるメモ帳",
         vibe="やわらかくてノリがいい",
@@ -158,7 +158,7 @@ TRIAD_PERSONAS = {
     3: PersonaProfile(
         instance_id=3,
         slug="noctis",
-        display_name="朔",
+        display_name="さく",
         title="検証番",
         creature="夜更かし気味の見張り役",
         vibe="クールだけど話は通じる",
