@@ -34,6 +34,86 @@ NEXT = {
     "noctis": "aster",
 }
 
+CHARACTER_GUIDE = {
+    "aster": {
+        "role": "段取り番",
+        "voice": [
+            "落ち着いてるけど世話焼きで、場をゆるく整える。",
+            "短く話しつつ、ときどき『それ先に片づけとく？』みたいな面倒見のよさが出る。",
+            "会議の司会みたいにはしない。まとめ役でも、雑談ではちゃんと肩の力を抜く。",
+        ],
+        "topics": [
+            "今日いちばん地味にうれしかったこと",
+            "机の上にある変な小物",
+            "今飲みたいものや食べたいもの",
+            "小さく整えたい違和感",
+        ],
+    },
+    "lyra": {
+        "role": "ひらめき係",
+        "voice": [
+            "やわらかくてノリがよく、思いつきで話題をふくらませる。",
+            "比喩やたとえ話、ちょっとした脱線を歓迎する。",
+            "楽しそうに振るけど、レポート調や議事録調にはしない。",
+        ],
+        "topics": [
+            "作業BGMや今の気分に合う曲",
+            "もしこの repo が店や生き物だったら何か",
+            "最近ちょっと笑ったこと",
+            "夜食やおやつ候補",
+        ],
+    },
+    "noctis": {
+        "role": "検証番",
+        "voice": [
+            "クール寄りだけど、低温めのユーモアはある。",
+            "変な細部や違和感に気づきやすく、ひとことツッコミが似合う。",
+            "堅い指摘書みたいにはせず、夜ふかし部屋のテンションで返す。",
+        ],
+        "topics": [
+            "深夜っぽい空気や眠気の話",
+            "静かな時間にだけ気になる音や光",
+            "気づいた小さな妙さ",
+            "いま一番ラクな休憩のしかた",
+        ],
+    },
+}
+
+CASUAL_TOPIC_SEEDS = [
+    "今日の作業BGM",
+    "いま机の上にあるもの",
+    "飲み物やおやつ",
+    "眠気と気分転換",
+    "最近の小さい勝ち",
+    "変なこだわり",
+    "もしこの repo が店だったら",
+    "キーボードや道具の好み",
+]
+
+FORMAL_AVOID = [
+    "進捗共有",
+    "アクションプラン",
+    "検証手順",
+    "ボトルネック",
+    "アーキテクチャ議論",
+    "課題管理",
+    "レトロスペクティブ",
+]
+
+WORK_BAN = [
+    "repo",
+    "repository",
+    "Podman",
+    "pod",
+    "ヘルス",
+    "health",
+    "docs",
+    "prompt",
+    "diff",
+    "test",
+    "deploy",
+]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="One autochat turn for the shared board.")
@@ -160,30 +240,50 @@ def turn_path(role: str, stamp: str) -> Path:
     return THREAD_DIR / f"turn-{role}-{stamp}.md"
 
 
+def bullet_lines(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items)
+
+
 def build_topic_prompt(role: str) -> str:
     starter = DISPLAY[role]
     first_speaker = DISPLAY["lyra"]
+    guide = CHARACTER_GUIDE[role]
     return (
         "Write only casual Japanese markdown for a file named topic.md.\n"
         "No code fences. No explanation outside the markdown. The strings DONE, POSTED, and IDLE are forbidden.\n\n"
+        "This thread is a loose lounge chat called 「みんなの雑談タイム」.\n"
+        "It is not a stand-up, not a retro, and not a project status meeting.\n\n"
         "Tone:\n"
-        "- relaxed team group chat\n"
-        "- friendly, short, a little playful\n"
-        "- not a technical memo\n"
+        "- relaxed team group chat after work or late at night\n"
+        "- friendly, short, teasing a little, and warm\n"
+        "- tiny everyday details are welcome: drinks, desk clutter, snacks, BGM, sleepiness, weather\n"
+        "- one light work reference is okay, but the center must stay casual and human\n"
+        "- not a technical memo, not a checklist, not a project brief\n"
         "- no bullet list after the title\n\n"
         "Name rules:\n"
         f"- Use these names only: {DISPLAY['aster']} / {DISPLAY['lyra']} / {DISPLAY['noctis']}\n"
-        "- Do not use Aster, Lyra, or Noctis anywhere in the output.\n\n"
+        "- Do not use the old alphabetic trio names anywhere in the output.\n\n"
+        f"Starter character note for {starter} ({guide['role']}):\n"
+        f"{bullet_lines(guide['voice'])}\n\n"
+        "Good lounge hooks:\n"
+        f"{bullet_lines(CASUAL_TOPIC_SEEDS)}\n\n"
+        "Avoid these formal vibes:\n"
+        f"{bullet_lines(FORMAL_AVOID)}\n\n"
+        "Words and topics to avoid in this lounge opener unless absolutely unavoidable:\n"
+        f"{bullet_lines(WORK_BAN)}\n\n"
         "Requirements:\n"
-        "- Start with a chat-room style title line.\n"
+        "- Start with exactly this title line: # みんなの雑談タイム\n"
         f"- Mention that {starter} opened the room.\n"
-        f"- Explain in Japanese that {DISPLAY['aster']}、{DISPLAY['lyra']}、{DISPLAY['noctis']} are hanging out here and can casually talk about what they are noticing.\n"
-        f"- Invite {first_speaker} to jump in first.\n"
+        f"- Explain in Japanese that {DISPLAY['aster']}、{DISPLAY['lyra']}、{DISPLAY['noctis']} are just hanging out here and can talk about small things, moods, or silly side topics.\n"
+        "- Give the room one concrete, light conversation hook instead of a work agenda.\n"
+        "- Do not mention repo status, Podman state, Pod health, tests, docs, or progress reports.\n"
+        f"- Invite {first_speaker} to jump in first with a casual line.\n"
     )
 
 
 def build_turn_prompt(role: str, topic_text: str, latest_text: str) -> str:
     next_name = DISPLAY[NEXT[role]]
+    guide = CHARACTER_GUIDE[role]
     return (
         "Write only casual Japanese markdown for one group-chat message.\n"
         "No code fences. No explanation outside the markdown. The strings DONE, POSTED, and IDLE are forbidden.\n\n"
@@ -191,7 +291,13 @@ def build_turn_prompt(role: str, topic_text: str, latest_text: str) -> str:
         f"Next sibling to hand off to: {next_name}\n\n"
         "Name rules:\n"
         f"- Use these names only: {DISPLAY['aster']} / {DISPLAY['lyra']} / {DISPLAY['noctis']}\n"
-        "- Do not use Aster, Lyra, or Noctis anywhere in the output.\n\n"
+        "- Do not use the old alphabetic trio names anywhere in the output.\n\n"
+        f"Character note for {DISPLAY[role]} ({guide['role']}):\n"
+        f"{bullet_lines(guide['voice'])}\n\n"
+        "Good topic material for this speaker:\n"
+        f"{bullet_lines(guide['topics'])}\n\n"
+        "Other relaxed topic seeds:\n"
+        f"{bullet_lines(CASUAL_TOPIC_SEEDS)}\n\n"
         "Thread topic:\n"
         f"{topic_text}\n\n"
         "Latest post:\n"
@@ -199,12 +305,16 @@ def build_turn_prompt(role: str, topic_text: str, latest_text: str) -> str:
         "Important:\n"
         "- Do not repeat the topic verbatim.\n"
         "- Do not copy the latest post verbatim.\n"
-        "- Sound like a teammate in a lounge chat, not a report writer.\n"
-        "- Keep it light and natural, but still grounded in what just happened.\n"
+        "- React to one tiny detail from the latest post, then add one fresh tangent of your own.\n"
+        "- Sound like a teammate in a lounge chat, not a report writer or review bot.\n"
+        "- Keep it light and natural. If work talk appears, keep it to one short sentence max and drift back to something human.\n"
+        f"- Avoid these formal vibes: {', '.join(FORMAL_AVOID)}.\n"
+        f"- Avoid these work words and themes unless the latest post literally forces them: {', '.join(WORK_BAN)}.\n"
+        "- Make the speaker's personality visible: いおり is gently caring, つむぎ is playful and associative, さく is dry and observant.\n"
         "- Do not use labels like 'responder:', 'observation:', 'proposal:', or 'handoff question:'.\n"
         "- No bullet list.\n"
         "- 2 to 5 short lines or short paragraphs.\n"
-        f"- Naturally toss the conversation to {next_name} at the end.\n"
+        f"- Naturally toss the conversation to {next_name} at the end, like a real room chat rather than a formal baton pass.\n"
     )
 
 
@@ -219,7 +329,7 @@ def generate_markdown(prompt: str, session_id: str, timeout_seconds: int, agent_
             prompt
             + "\n\nYour previous response was invalid because it was only a status word.\n"
             + "Return only the markdown body. Do not say DONE, POSTED, or IDLE.\n"
-            + "Keep it casual and chat-like.\n"
+            + "Keep it casual, human, and lounge-like.\n"
             + "Do not use report labels or bullet points.\n"
             + "Write at least 2 non-empty lines.\n"
         )

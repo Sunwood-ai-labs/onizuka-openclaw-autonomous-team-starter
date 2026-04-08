@@ -50,9 +50,9 @@ Directory layout:
 
 Default Gemma4 triad personas:
 
-- Instance 1 / `Aster`: systems lead
-- Instance 2 / `Lyra`: builder muse
-- Instance 3 / `Noctis`: verification sentinel
+- Instance 1 / `いおり`: systems lead
+- Instance 2 / `つむぎ`: builder muse
+- Instance 3 / `さく`: verification sentinel
 
 `init --count 3` seeds each instance workspace with managed `SOUL.md`, `IDENTITY.md`,
 `HEARTBEAT.md`, `BOOTSTRAP.md`, `USER.md`, and `TOOLS.md`.

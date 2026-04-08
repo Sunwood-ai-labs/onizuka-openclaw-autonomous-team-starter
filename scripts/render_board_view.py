@@ -39,6 +39,12 @@ SPEAKER_STYLE = {
     "system": {"label": "System", "accent": "#8a5cf6", "surface": "rgba(138,92,246,0.12)", "align": "full"},
 }
 
+LABEL_TO_SLUG = {
+    style["label"].lower(): slug
+    for slug, style in SPEAKER_STYLE.items()
+    if slug != "system"
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Render a human-viewable shared-board chat snapshot.")
@@ -64,10 +70,18 @@ def detect_speaker(path: Path) -> str:
             if parts:
                 return parts[0].lower()
     text = path.read_text(encoding="utf-8")
-    lowered = text.lower()
-    for slug in ("aster", "lyra", "noctis"):
-        if f"responder: {slug}" in lowered:
-            return slug
+    for raw in text.splitlines():
+        pair = parse_kv_line(raw)
+        if not pair:
+            continue
+        key, value = pair
+        if key.lower() != "responder":
+            continue
+        normalized = value.strip().lower()
+        if normalized in SPEAKER_STYLE:
+            return normalized
+        if normalized in LABEL_TO_SLUG:
+            return LABEL_TO_SLUG[normalized]
     return "system"
 
 
@@ -81,6 +95,13 @@ def detect_kind(path: Path) -> str:
     if path.name.startswith("turn-"):
         return "turn"
     return "note"
+
+
+def parse_kv_line(line: str) -> tuple[str, str] | None:
+    match = re.match(r"^([^:#][^:]*):\s*(.+)$", line.strip())
+    if not match:
+        return None
+    return match.group(1).strip(), match.group(2).strip()
 
 
 def markdown_to_html(text: str) -> str:
@@ -140,11 +161,11 @@ def markdown_to_html(text: str) -> str:
             flush_paragraph()
             list_buffer.append(line[2:].strip())
             continue
-        kv_match = re.match(r"^([A-Za-z][A-Za-z0-9 /_-]*):\s*(.+)$", line.strip())
-        if kv_match:
+        pair = parse_kv_line(line)
+        if pair:
             flush_list()
             flush_paragraph()
-            kv_buffer.append((kv_match.group(1).strip(), kv_match.group(2).strip()))
+            kv_buffer.append(pair)
             continue
         flush_kv()
         flush_list()
@@ -159,10 +180,11 @@ def markdown_to_html(text: str) -> str:
 def structured_chat_html(text: str) -> str | None:
     pairs: list[tuple[str, str]] = []
     for raw in text.strip().splitlines():
-        match = re.match(r"^([A-Za-z][A-Za-z0-9 /_-]*):\s*(.+)$", raw.strip())
-        if not match:
+        pair = parse_kv_line(raw)
+        if not pair:
             return None
-        pairs.append((match.group(1).strip().lower(), match.group(2).strip()))
+        key, value = pair
+        pairs.append((key.lower(), value))
 
     if len(pairs) < 2:
         return None

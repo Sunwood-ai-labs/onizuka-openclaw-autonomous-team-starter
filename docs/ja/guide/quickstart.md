@@ -38,9 +38,9 @@ podman kube play --replace --no-pod-prefix .\.openclaw\pod.yaml
 
 Gemma4 3体の初期人格:
 
-- Instance 1 / `Aster`: systems lead
-- Instance 2 / `Lyra`: builder muse
-- Instance 3 / `Noctis`: verification sentinel
+- Instance 1 / `いおり`: systems lead
+- Instance 2 / `つむぎ`: builder muse
+- Instance 3 / `さく`: verification sentinel
 
 繝・ぅ繝ｬ繧ｯ繝医Μ:
 

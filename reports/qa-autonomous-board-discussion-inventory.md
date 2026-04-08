@@ -9,8 +9,8 @@ Verified thread: `qa-e2e-board-discussion-8`
 Verify that each scaled Podman instance can run pod-local OpenClaw with `ollama/gemma4:e2b`, share one file-backed board, and leave a real discussion trail consisting of:
 
 - `topic.md`
-- one reply from Lyra
-- one reply from Noctis
+- one reply from つむぎ
+- one reply from さく
 - `summary.md`
 
 ## QA Checklist
@@ -39,10 +39,10 @@ Thread directory:
 
 Observed `discuss` output:
 
-- `Aster posted topic via ollama/gemma4:e2b`
-- `Lyra posted reply via ollama/gemma4:e2b`
-- `Noctis posted reply via ollama/gemma4:e2b`
-- `Aster posted summary via ollama/gemma4:e2b`
+- `いおり posted topic via ollama/gemma4:e2b`
+- `つむぎ posted reply via ollama/gemma4:e2b`
+- `さく posted reply via ollama/gemma4:e2b`
+- `いおり posted summary via ollama/gemma4:e2b`
 
 ## Notes
 
