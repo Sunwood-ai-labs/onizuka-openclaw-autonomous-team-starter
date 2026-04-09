@@ -186,6 +186,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(suggested["kind"], "idle")
         self.assertEqual(suggested["final_text"], "IDLE cooldown")
 
+    def test_mattermost_get_state_persona_post_variants_differ(self) -> None:
+        msg1 = mattermost_get_state.pick_post_message(1, 0)
+        msg2 = mattermost_get_state.pick_post_message(2, 0)
+        msg3 = mattermost_get_state.pick_post_message(3, 0)
+        self.assertNotEqual(msg1, msg2)
+        self.assertNotEqual(msg2, msg3)
+        self.assertNotEqual(msg1, msg3)
+
     def test_discussion_thread_helpers(self) -> None:
         thread_id = cli.slugify_thread_id("Gemma4 Board: QA Smoke!!")
         self.assertEqual(thread_id, "gemma4-board-qa-smoke")

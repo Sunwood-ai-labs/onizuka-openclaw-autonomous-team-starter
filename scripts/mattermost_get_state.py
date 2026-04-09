@@ -27,10 +27,22 @@ REACTION_EMOJI = {
     2: "sparkles",
     3: "thinking_face",
 }
-FALLBACK_MESSAGES = {
-    1: "その視点は大事ですね。次の一歩を小さく試すなら、観測項目をひとつに絞ると見えやすくなりそうです。",
-    2: "この話、まだ育てられそう。まずは小さく試して、どこで手応えが出るか見ていこう。",
-    3: "まだ切り分けの余地がありますね。次は条件を一つだけ動かして、差分を見たほうが良さそうです。",
+POST_VARIANTS = {
+    1: [
+        "その視点は大事ですね。次の一歩を小さく試すなら、観測項目をひとつに絞ると見えやすくなりそうです。",
+        "急いで結論に寄せるより、前提をひとつ固定して見るほうが整理しやすそうです。まずは比較軸を一個に絞ってみませんか。",
+        "この論点は丁寧に扱いたいですね。次は条件を増やすより、どこを観測するかを先に決めたほうが進めやすいと思います。",
+    ],
+    2: [
+        "この話、まだ育てられそう。まずは小さく試して、どこで手応えが出るか見ていこう。",
+        "もう少しふくらませられそう。最初の一歩は軽くして、反応が返ってくる場所を先に見つけたいね。",
+        "このテーマ、うまく転がせば面白くなりそう。まずは試し方をひとつ決めて、そこから広げていこう。",
+    ],
+    3: [
+        "まだ切り分けの余地がありますね。次は条件を一つだけ動かして、差分を見たほうが良さそうです。",
+        "観測点はまだ残っています。仮説を増やす前に、変数を一つだけ動かしてログを比較したほうが早いです。",
+        "ここは感触より差分で見たいですね。まず一条件だけ変えて、どこが本当に効いているかを確認したいです。",
+    ],
 }
 
 
@@ -42,6 +54,11 @@ def parse_args() -> argparse.Namespace:
 
 def shell_join(parts: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in parts)
+
+
+def pick_post_message(instance_id: int, seed: int) -> str:
+    variants = POST_VARIANTS[instance_id]
+    return variants[seed % len(variants)]
 
 
 def build_suggested_next(
@@ -71,7 +88,7 @@ def build_suggested_next(
                     emoji = REACTION_EMOJI[instance_id]
                     return {
                         "kind": "reaction",
-                        "reason": "react-to-latest-other-post",
+                        "reason": f"react-to-latest-other-post-{HANDLES[instance_id]}",
                         "expected_prefix": "REACTION_ADDED",
                         "command": shell_join(
                             [
@@ -87,10 +104,14 @@ def build_suggested_next(
                         ),
                     }
 
-    message = FALLBACK_MESSAGES[instance_id]
+    latest_ts = 0
+    if isinstance(default_summary, dict):
+        latest_ts = int(default_summary.get("last_post_at", 0) or 0)
+    seed = latest_ts // 60000 + instance_id
+    message = pick_post_message(instance_id, seed)
     return {
         "kind": "post",
-        "reason": "top-level-default-post",
+        "reason": f"top-level-default-post-{HANDLES[instance_id]}",
         "expected_prefix": "POSTED",
         "command": shell_join(
             [
