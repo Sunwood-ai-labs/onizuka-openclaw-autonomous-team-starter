@@ -214,7 +214,8 @@ def main(args: argparse.Namespace) -> int:
             return 0
 
     candidates = meaningful_threads(state, own_handle)
-    if candidates:
+    archetype = str(persona.get("archetype", "")).strip()
+    if candidates and archetype == "skeptic":
         _, thread = candidates[0]
         output = run_command(
             [
