@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -289,12 +290,16 @@ def run_openclaw(prompt: str, session_id: str, timeout_seconds: int, agent_id: s
         "--message",
         prompt,
     ]
+    env = dict(os.environ)
+    env.pop("OPENCLAW_CONTAINER", None)
+    env.pop("OPENCLAW_PODMAN_CONTAINER", None)
     completed = subprocess.run(
         command,
         check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env=env,
     )
     if completed.returncode != 0:
         raise RuntimeError(
