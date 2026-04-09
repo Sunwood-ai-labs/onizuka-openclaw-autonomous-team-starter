@@ -206,12 +206,29 @@ class CliTests(unittest.TestCase):
         self.assertEqual(suggested["final_text"], "IDLE cooldown")
 
     def test_mattermost_get_state_persona_post_variants_differ(self) -> None:
-        msg1 = mattermost_get_state.pick_post_message(1, 0)
-        msg2 = mattermost_get_state.pick_post_message(2, 0)
-        msg3 = mattermost_get_state.pick_post_message(3, 0)
+        msg1 = mattermost_get_state.pick_post_message(mattermost_get_state.default_persona_config(1), 0)
+        msg2 = mattermost_get_state.pick_post_message(mattermost_get_state.default_persona_config(2), 0)
+        msg3 = mattermost_get_state.pick_post_message(mattermost_get_state.default_persona_config(3), 0)
         self.assertNotEqual(msg1, msg2)
         self.assertNotEqual(msg2, msg3)
         self.assertNotEqual(msg1, msg3)
+
+    def test_mattermost_get_state_parses_workspace_persona_block(self) -> None:
+        text = """
+## Mattermost Persona
+```json
+{
+  "reaction_emoji": "eyes",
+  "channel_preference": ["triad-lab", "triad-free-talk"],
+  "post_variants": ["a", "b"],
+  "auto_public_channel": null
+}
+```
+"""
+        payload = mattermost_get_state.parse_workspace_persona_block(text)
+        self.assertEqual(payload["reaction_emoji"], "eyes")
+        self.assertEqual(payload["channel_preference"][1], "triad-free-talk")
+        self.assertEqual(payload["post_variants"][0], "a")
 
     def test_mattermost_get_state_prefers_non_self_reaction_candidates(self) -> None:
         channels = [
@@ -249,7 +266,10 @@ class CliTests(unittest.TestCase):
 
     def test_mattermost_get_state_prefers_alternate_post_channel_when_self_was_latest(self) -> None:
         channel = mattermost_get_state.preferred_post_channel(
-            3,
+            {
+                "handle": "saku",
+                "channel_preference": ["triad-free-talk", "triad-lab"],
+            },
             "triad-lab",
             [
                 {

@@ -365,6 +365,43 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
     pod_name = instance.pod_name
     container_name = instance.container_name
     trio_size = max(3, instance.instance_id)
+    mattermost_persona = {
+        1: {
+            "reaction_emoji": "eyes",
+            "channel_preference": ["triad-lab", "triad-open-room", "triad-free-talk"],
+            "post_variants": [
+                "その視点は大事ですね。次の一歩を小さく試すなら、観測項目をひとつに絞ると見えやすくなりそうです。",
+                "急いで結論に寄せるより、前提をひとつ固定して見るほうが整理しやすそうです。まずは比較軸を一個に絞ってみませんか。",
+                "この論点は丁寧に扱いたいですね。次は条件を増やすより、どこを観測するかを先に決めたほうが進めやすいと思います。",
+            ],
+            "auto_public_channel": None,
+        },
+        2: {
+            "reaction_emoji": "sparkles",
+            "channel_preference": ["triad-open-room", "triad-lab", "triad-free-talk"],
+            "post_variants": [
+                "この話、まだ育てられそう。まずは小さく試して、どこで手応えが出るか見ていこう。",
+                "もう少しふくらませられそう。最初の一歩は軽くして、反応が返ってくる場所を先に見つけたいね。",
+                "このテーマ、うまく転がせば面白くなりそう。まずは試し方をひとつ決めて、そこから広げていこう。",
+            ],
+            "auto_public_channel": {
+                "channel_name": "triad-open-room",
+                "display_name": "Triad Open Room",
+                "purpose": "Public side room for emergent triad topics",
+                "message": "新しい公開チャンネルをひとつ用意しました。少し枝分かれした話題や試し書きは、ここで軽く育てていきましょう。",
+            },
+        },
+        3: {
+            "reaction_emoji": "thinking_face",
+            "channel_preference": ["triad-free-talk", "triad-open-room", "triad-lab"],
+            "post_variants": [
+                "まだ切り分けの余地がありますね。次は条件を一つだけ動かして、差分を見たほうが良さそうです。",
+                "観測点はまだ残っています。仮説を増やす前に、変数を一つだけ動かしてログを比較したほうが早いです。",
+                "ここは感触より差分で見たいですね。まず一条件だけ変えて、どこが本当に効いているかを確認したいです。",
+            ],
+            "auto_public_channel": None,
+        },
+    }[profile.instance_id]
 
     soul = "\n".join(
         [
@@ -404,6 +441,14 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
             "- 既存の memory file が stock scaffold から十分に育っているなら踏み荒らさない。",
             "- ユーザーが明示しない破壊的操作は避ける。",
             f"- {profile.caution}。",
+            "",
+            "## Mattermost Persona",
+            "",
+            "このブロックは Mattermost helper scripts の source of truth です。",
+            "cron のラウンジ投稿は、この JSON を読んで反応絵文字、投稿先の優先順、文体候補を決めます。",
+            "```json",
+            json.dumps(mattermost_persona, ensure_ascii=False, indent=2),
+            "```",
             "",
             "## 三体連携",
             "",
