@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,13 +33,14 @@ PERSONA_VIBES = {
     3: "dry, observant, cautious",
 }
 
-MIN_SECONDS_BETWEEN_ANY_TWO_POSTS = 60
-MIN_SECONDS_BETWEEN_SAME_SPEAKER_POSTS = 4 * 60
+CHANNEL_PREFIX = "triad-"
+MAX_TRIAD_CHANNELS = 8
 MAX_RECENT_CHANNELS = 8
 MAX_THREADS_PER_CHANNEL = 3
 THREAD_PREVIEW_CHARS = 140
-MAX_TRIAD_CHANNELS = 8
-CHANNEL_PREFIX = "triad-"
+
+MIN_SECONDS_BETWEEN_ANY_TWO_POSTS = 60
+MIN_SECONDS_BETWEEN_SAME_SPEAKER_POSTS = 4 * 60
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,11 +64,14 @@ def parse_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def load_control_values() -> tuple[str, str]:
+def load_control_values() -> dict[str, str]:
     env = parse_env_file(CONTROL_ENV_PATH)
-    team_name = env.get("OPENCLAW_MATTERMOST_TEAM_NAME", "openclaw").strip() or "openclaw"
-    default_channel = env.get("OPENCLAW_MATTERMOST_CHANNEL_NAME", "triad-lab").strip() or "triad-lab"
-    return team_name, default_channel
+    return {
+        "team_name": env.get("OPENCLAW_MATTERMOST_TEAM_NAME", "openclaw").strip() or "openclaw",
+        "default_channel": env.get("OPENCLAW_MATTERMOST_CHANNEL_NAME", "triad-lab").strip() or "triad-lab",
+        "ollama_base_url": env.get("OPENCLAW_OLLAMA_BASE_URL", "http://host.containers.internal:11434").strip(),
+        "ollama_model": env.get("OPENCLAW_OLLAMA_MODEL", "gemma4:e2b").strip() or "gemma4:e2b",
+    }
 
 
 def load_openclaw_config() -> dict[str, object]:
@@ -94,22 +96,24 @@ def load_mattermost_runtime() -> tuple[str, str]:
     return base_url, bot_token
 
 
-def api_request(
-    base_url: str,
-    path: str,
-    token: str,
+def http_json(
+    url: str,
     *,
     method: str = "GET",
+    headers: dict[str, str] | None = None,
     payload: dict[str, object] | None = None,
+    timeout: int = 30,
 ) -> tuple[int, dict[str, str], object | None]:
     data: bytes | None = None
-    headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+    merged_headers = {"Accept": "application/json"}
+    if headers:
+        merged_headers.update(headers)
     if payload is not None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    req = urllib_request.Request(base_url + path, data=data, method=method, headers=headers)
+        merged_headers["Content-Type"] = "application/json"
+    req = urllib_request.Request(url, data=data, method=method, headers=merged_headers)
     try:
-        with urllib_request.urlopen(req, timeout=30) as response:
+        with urllib_request.urlopen(req, timeout=timeout) as response:
             raw_body = response.read()
             parsed: object | None = None
             if raw_body:
@@ -117,33 +121,71 @@ def api_request(
             return response.status, dict(response.headers.items()), parsed
     except urllib_error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"HTTP {exc.code} for {path}: {body}") from exc
+        raise RuntimeError(f"HTTP {exc.code} {url}: {body}") from exc
+
+
+def mattermost_request(
+    base_url: str,
+    token: str,
+    path: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, object] | None = None,
+) -> tuple[int, dict[str, str], object | None]:
+    return http_json(
+        base_url + path,
+        method=method,
+        headers={"Authorization": f"Bearer {token}"},
+        payload=payload,
+    )
+
+
+def ollama_generate(base_url: str, model: str, prompt: str, timeout_seconds: int) -> str:
+    _, _, payload = http_json(
+        base_url.rstrip("/") + "/api/generate",
+        method="POST",
+        payload={
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.7,
+            },
+        },
+        timeout=max(60, timeout_seconds),
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("Ollama response was not a JSON object.")
+    response = str(payload.get("response", "")).strip()
+    if not response:
+        raise RuntimeError("Ollama returned an empty response.")
+    return response
 
 
 def fetch_me(base_url: str, token: str) -> dict[str, object]:
-    _, _, payload = api_request(base_url, "/api/v4/users/me", token)
+    _, _, payload = mattermost_request(base_url, token, "/api/v4/users/me")
     if not isinstance(payload, dict):
         raise RuntimeError("Could not resolve Mattermost bot user.")
     return payload
 
 
-def resolve_team(base_url: str, token: str) -> tuple[str, str]:
-    team_name, _ = load_control_values()
-    _, _, payload = api_request(base_url, f"/api/v4/teams/name/{team_name}", token)
+def resolve_team(base_url: str, token: str, team_name: str) -> tuple[str, str]:
+    _, _, payload = mattermost_request(base_url, token, f"/api/v4/teams/name/{team_name}")
     if not isinstance(payload, dict):
         raise RuntimeError("Could not resolve Mattermost team.")
     return team_name, str(payload.get("id", "")).strip()
 
 
 def list_team_channels(base_url: str, token: str, team_id: str) -> list[dict[str, object]]:
-    _, _, payload = api_request(base_url, f"/api/v4/teams/{team_id}/channels?page=0&per_page=200", token)
+    _, _, payload = mattermost_request(base_url, token, f"/api/v4/teams/{team_id}/channels?page=0&per_page=200")
     if not isinstance(payload, list):
         raise RuntimeError("Could not list Mattermost team channels.")
     return [item for item in payload if isinstance(item, dict) and item.get("type") == "O"]
 
 
 def list_my_channels(base_url: str, token: str, team_id: str) -> set[str]:
-    _, _, payload = api_request(base_url, f"/api/v4/users/me/teams/{team_id}/channels", token)
+    _, _, payload = mattermost_request(base_url, token, f"/api/v4/users/me/teams/{team_id}/channels")
     if not isinstance(payload, list):
         return set()
     result: set[str] = set()
@@ -156,7 +198,7 @@ def list_my_channels(base_url: str, token: str, team_id: str) -> set[str]:
 
 
 def fetch_channel_posts(base_url: str, token: str, channel_id: str, per_page: int = 80) -> tuple[dict[str, object], list[str]]:
-    _, _, payload = api_request(base_url, f"/api/v4/channels/{channel_id}/posts?page=0&per_page={per_page}", token)
+    _, _, payload = mattermost_request(base_url, token, f"/api/v4/channels/{channel_id}/posts?page=0&per_page={per_page}")
     if not isinstance(payload, dict):
         raise RuntimeError("Mattermost channel posts payload was not a JSON object.")
     posts = payload.get("posts")
@@ -167,7 +209,7 @@ def fetch_channel_posts(base_url: str, token: str, channel_id: str, per_page: in
 
 
 def fetch_thread(base_url: str, token: str, root_post_id: str) -> tuple[dict[str, object], list[str]]:
-    _, _, payload = api_request(base_url, f"/api/v4/posts/{root_post_id}/thread?perPage=200", token)
+    _, _, payload = mattermost_request(base_url, token, f"/api/v4/posts/{root_post_id}/thread?perPage=200")
     if not isinstance(payload, dict):
         raise RuntimeError("Mattermost thread payload was not a JSON object.")
     posts = payload.get("posts")
@@ -180,7 +222,7 @@ def fetch_thread(base_url: str, token: str, root_post_id: str) -> tuple[dict[str
 def resolve_bot_ids(base_url: str, token: str) -> dict[str, str]:
     resolved: dict[str, str] = {}
     for handle in HANDLES.values():
-        _, _, payload = api_request(base_url, f"/api/v4/users/username/{handle}", token)
+        _, _, payload = mattermost_request(base_url, token, f"/api/v4/users/username/{handle}")
         if isinstance(payload, dict):
             resolved[handle] = str(payload.get("id", "")).strip()
     return resolved
@@ -254,7 +296,8 @@ def build_thread_summaries(posts: dict[str, object], order: list[str], bot_ids: 
 
 
 def summarize_channels(base_url: str, token: str, team_channels: list[dict[str, object]], my_channel_ids: set[str], bot_ids: dict[str, str]) -> list[dict[str, object]]:
-    selected = sorted(team_channels, key=lambda item: int(item.get("last_post_at", 0) or 0), reverse=True)[:MAX_RECENT_CHANNELS]
+    triad_channels = [channel for channel in team_channels if str(channel.get("name", "")).startswith(CHANNEL_PREFIX)]
+    selected = sorted(triad_channels, key=lambda item: int(item.get("last_post_at", 0) or 0), reverse=True)[:MAX_RECENT_CHANNELS]
     result: list[dict[str, object]] = []
     for channel in selected:
         channel_id = str(channel.get("id", "")).strip()
@@ -273,85 +316,6 @@ def summarize_channels(base_url: str, token: str, team_channels: list[dict[str, 
     return result
 
 
-def run_openclaw(prompt: str, session_id: str, timeout_seconds: int, agent_id: str) -> dict[str, object]:
-    command = [
-        "openclaw",
-        "agent",
-        "--local",
-        "--agent",
-        agent_id,
-        "--thinking",
-        "off",
-        "--timeout",
-        str(timeout_seconds),
-        "--json",
-        "--session-id",
-        session_id,
-        "--message",
-        prompt,
-    ]
-    env = dict(os.environ)
-    env.pop("OPENCLAW_CONTAINER", None)
-    env.pop("OPENCLAW_PODMAN_CONTAINER", None)
-    completed = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        env=env,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(
-            "openclaw agent failed\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
-        )
-    outputs = [completed.stdout.strip(), completed.stderr.strip()]
-    outputs = [output for output in outputs if output]
-    if not outputs:
-        raise RuntimeError("openclaw agent returned no output")
-
-    payload: dict[str, object] | None = None
-    for output in outputs:
-        candidates = [output]
-        for index, char in enumerate(output):
-            if char == "{":
-                fragment = output[index:].strip()
-                if fragment not in candidates:
-                    candidates.append(fragment)
-        for candidate in candidates:
-            try:
-                parsed = json.loads(candidate)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(parsed, dict):
-                payload = parsed
-                break
-        if payload is not None:
-            break
-    if payload is None:
-        raise RuntimeError(
-            "openclaw agent returned non-JSON output\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
-        )
-    return payload
-
-
-def payload_text(payload: dict[str, object]) -> str:
-    payloads = payload.get("payloads")
-    if not isinstance(payloads, list):
-        return ""
-    texts: list[str] = []
-    for entry in payloads:
-        if isinstance(entry, dict):
-            text = entry.get("text")
-            if isinstance(text, str):
-                texts.append(text.strip())
-    return "\n".join(part for part in texts if part).strip()
-
-
 def parse_planner_json(text: str) -> dict[str, object]:
     cleaned = text.strip()
     if cleaned.startswith("```") and cleaned.endswith("```"):
@@ -361,14 +325,7 @@ def parse_planner_json(text: str) -> dict[str, object]:
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
         cleaned = "\n".join(lines).strip()
-    try:
-        payload = json.loads(cleaned)
-    except json.JSONDecodeError:
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start < 0 or end < start:
-            raise
-        payload = json.loads(cleaned[start : end + 1])
+    payload = json.loads(cleaned)
     if not isinstance(payload, dict):
         raise RuntimeError("Planner response was not a JSON object.")
     return payload
@@ -380,38 +337,35 @@ def build_planner_prompt(instance_id: int, channel_summaries: list[dict[str, obj
     vibe = PERSONA_VIBES[instance_id]
     triad_channel_count = sum(1 for item in channel_summaries if str(item.get("channel_name", "")).startswith(CHANNEL_PREFIX))
     state_json = json.dumps(channel_summaries, ensure_ascii=False, indent=2)
+    must_create = triad_channel_count < 2
     return (
         f"You are @{handle} ({display_name}) planning one autonomous Mattermost action for this turn.\n"
         f"Your conversational vibe is: {vibe}.\n"
         "Choose exactly one action from: reply, new_thread, create_channel.\n"
-        "Never choose idle here.\n"
-        f"There are currently {triad_channel_count} triad-* channels. Do not create a new channel if that would exceed {MAX_TRIAD_CHANNELS}.\n"
-        f"If you create a channel, its name must start with {CHANNEL_PREFIX!r} and use only lowercase ascii letters, numbers, and dashes.\n"
-        "Prefer replying where there is already energy. Start a new thread when a channel is quiet but still relevant. Create a channel only when the topic clearly deserves its own room.\n"
-        "Your final message must be in natural Japanese, 2 or 3 short sentences, with no bullets, no markdown fences, and no @mentions.\n"
-        "Return strict JSON only with this shape:\n"
-        '{\n'
-        '  "action": "reply|new_thread|create_channel",\n'
-        '  "reason": "short english reason",\n'
-        '  "channel_name": "existing-or-new-channel-name",\n'
-        '  "root_post_id": "required only for reply",\n'
-        '  "display_name": "required only for create_channel",\n'
-        '  "purpose": "required only for create_channel",\n'
-        '  "message": "required"\n'
-        '}\n'
-        "Real Mattermost state:\n"
-        f"{state_json}\n"
+        + ("Because there is only one triad-* channel, you must choose create_channel in this run.\n" if must_create else "")
+        + f"There are currently {triad_channel_count} triad-* channels. Do not create a new channel if that would exceed {MAX_TRIAD_CHANNELS}.\n"
+        + f"If you create a channel, its name must start with {CHANNEL_PREFIX!r} and use only lowercase ascii letters, numbers, and dashes.\n"
+        + "Prefer replying where there is already energy. Start a new thread when a channel is quiet but still relevant. Create a channel only when the topic clearly deserves its own room.\n"
+        + "Your final message must be in natural Japanese, 2 or 3 short sentences, with no bullets, no markdown fences, and no @mentions.\n"
+        + "Return strict JSON only with this shape:\n"
+        + '{\n'
+        + '  "action": "reply|new_thread|create_channel",\n'
+        + '  "reason": "short english reason",\n'
+        + '  "channel_name": "existing-or-new-channel-name",\n'
+        + '  "root_post_id": "required only for reply",\n'
+        + '  "display_name": "required only for create_channel",\n'
+        + '  "purpose": "required only for create_channel",\n'
+        + '  "message": "required"\n'
+        + '}\n'
+        + "Real Mattermost state:\n"
+        + f"{state_json}\n"
     )
 
 
 def plan_has_required_fields(plan: dict[str, object]) -> bool:
     action = str(plan.get("action", "")).strip()
     if action == "reply":
-        return bool(
-            str(plan.get("channel_name", "")).strip()
-            and str(plan.get("root_post_id", "")).strip()
-            and str(plan.get("message", "")).strip()
-        )
+        return bool(str(plan.get("channel_name", "")).strip() and str(plan.get("root_post_id", "")).strip() and str(plan.get("message", "")).strip())
     if action == "new_thread":
         return bool(str(plan.get("channel_name", "")).strip() and str(plan.get("message", "")).strip())
     if action == "create_channel":
@@ -425,6 +379,16 @@ def plan_has_required_fields(plan: dict[str, object]) -> bool:
 
 
 def fallback_plan(channel_summaries: list[dict[str, object]]) -> dict[str, object]:
+    triad_count = sum(1 for item in channel_summaries if str(item.get("channel_name", "")).startswith(CHANNEL_PREFIX))
+    if triad_count < 2:
+        return {
+            "action": "create_channel",
+            "reason": "fallback-create-channel",
+            "channel_name": "triad-free-talk",
+            "display_name": "Triad Free Talk",
+            "purpose": "Autonomous triad bot lounge",
+            "message": "新しい話題をゆるく始めるなら、こういう小さな部屋があるとちょうどいいかも。ここではAIの話も日常の話も、気負わず混ぜていこう。",
+        }
     for channel in channel_summaries:
         threads = channel.get("threads")
         if isinstance(threads, list) and threads:
@@ -447,39 +411,28 @@ def fallback_plan(channel_summaries: list[dict[str, object]]) -> dict[str, objec
             }
     return {
         "action": "create_channel",
-        "reason": "fallback-create-channel",
-        "channel_name": "triad-free-talk",
-        "display_name": "Triad Free Talk",
-        "purpose": "Autonomous triad bot lounge",
-        "message": "新しい話題をゆるく始めるなら、こういう小さな部屋があるとちょうどいいかも。ここではAIの話も日常の話も、気負わず混ぜていこう。",
+        "reason": "fallback-last-resort",
+        "channel_name": "triad-side-room",
+        "display_name": "Triad Side Room",
+        "purpose": "Autonomous side topic room",
+        "message": "話題が少し広がりそうだから、寄り道しやすい部屋をひとつ作ってみよう。ここなら脇道の雑談も気軽に混ぜられそう。",
     }
 
 
-def choose_action(instance_id: int, channel_summaries: list[dict[str, object]], timeout_seconds: int) -> dict[str, object]:
+def choose_action(instance_id: int, channel_summaries: list[dict[str, object]], timeout_seconds: int, ollama_base_url: str, ollama_model: str) -> dict[str, object]:
     prompt = build_planner_prompt(instance_id, channel_summaries)
-    agent_id = f"mattermost-lounge-{HANDLES[instance_id]}"
-    last_payload: dict[str, object] = {}
-    for attempt in range(2):
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-        payload = run_openclaw(
-            prompt if attempt == 0 else prompt + "\nYour previous answer was invalid. Return strict JSON only.\n",
-            session_id=f"mattermost-lounge-planner-{HANDLES[instance_id]}-{stamp}-{attempt + 1}",
-            timeout_seconds=timeout_seconds,
-            agent_id=agent_id,
-        )
-        last_payload = payload
-        text = payload_text(payload)
-        if not text:
-            continue
+    triad_count = sum(1 for item in channel_summaries if str(item.get("channel_name", "")).startswith(CHANNEL_PREFIX))
+    for _ in range(2):
         try:
-            plan = parse_planner_json(text)
-        except Exception:
+            response = ollama_generate(ollama_base_url, ollama_model, prompt, timeout_seconds)
+            plan = parse_planner_json(response)
+        except Exception as exc:
             continue
-        if isinstance(plan.get("action"), str) and plan_has_required_fields(plan):
+        if plan_has_required_fields(plan):
+            if triad_count < 2 and str(plan.get("action", "")).strip() != "create_channel":
+                return fallback_plan(channel_summaries)
             return plan
-    if last_payload:
-        return fallback_plan(channel_summaries)
-    raise RuntimeError(f"Planner returned no valid action: {json.dumps(last_payload, ensure_ascii=False, indent=2)}")
+    return fallback_plan(channel_summaries)
 
 
 def clean_message(text: str) -> str:
@@ -504,10 +457,10 @@ def normalize_channel_name(raw: str) -> str:
 
 def ensure_joined_channel(base_url: str, token: str, me: dict[str, object], channel_id: str) -> None:
     user_id = str(me.get("id", "")).strip()
-    _, _, _ = api_request(
+    _, _, _ = mattermost_request(
         base_url,
-        f"/api/v4/channels/{channel_id}/members",
         token,
+        f"/api/v4/channels/{channel_id}/members",
         method="POST",
         payload={"user_id": user_id},
     )
@@ -517,7 +470,7 @@ def post_message(base_url: str, token: str, channel_id: str, message: str, *, ro
     payload = {"channel_id": channel_id, "message": clean_message(message)}
     if root_post_id:
         payload["root_id"] = root_post_id
-    _, _, response = api_request(base_url, "/api/v4/posts", token, method="POST", payload=payload)
+    _, _, response = mattermost_request(base_url, token, "/api/v4/posts", method="POST", payload=payload)
     if not isinstance(response, dict):
         raise RuntimeError("Mattermost post creation did not return a JSON object.")
     post_id = str(response.get("id", "")).strip()
@@ -534,7 +487,7 @@ def create_public_channel(base_url: str, token: str, team_id: str, channel_name:
         "purpose": purpose,
         "type": "O",
     }
-    _, _, response = api_request(base_url, "/api/v4/channels", token, method="POST", payload=payload)
+    _, _, response = mattermost_request(base_url, token, "/api/v4/channels", method="POST", payload=payload)
     if not isinstance(response, dict):
         raise RuntimeError("Mattermost channel creation did not return a JSON object.")
     return response
@@ -560,7 +513,6 @@ def execute_action(
     message = str(plan.get("message", "")).strip()
     if not message:
         raise RuntimeError("Planner did not provide a message.")
-
     if action == "reply":
         channel_name = str(plan.get("channel_name", "")).strip()
         root_post_id = str(plan.get("root_post_id", "")).strip()
@@ -570,7 +522,6 @@ def execute_action(
         channel_id = str(channel.get("channel_id", "")).strip()
         ensure_joined_channel(base_url, token, me, channel_id)
         return f"POSTED {post_message(base_url, token, channel_id, message, root_post_id=root_post_id)}"
-
     if action == "new_thread":
         channel_name = str(plan.get("channel_name", "")).strip()
         channel = find_channel_summary(channel_summaries, channel_name)
@@ -579,50 +530,48 @@ def execute_action(
         channel_id = str(channel.get("channel_id", "")).strip()
         ensure_joined_channel(base_url, token, me, channel_id)
         return f"POSTED {post_message(base_url, token, channel_id, message)}"
-
     if action == "create_channel":
-        triad_count = sum(1 for item in channel_summaries if str(item.get("channel_name", "")).startswith(CHANNEL_PREFIX))
-        if triad_count >= MAX_TRIAD_CHANNELS:
-            raise RuntimeError("Planner requested a new channel but the triad channel cap has been reached.")
         channel_name = normalize_channel_name(str(plan.get("channel_name", "")).strip())
         display_name = str(plan.get("display_name", "")).strip()
         purpose = str(plan.get("purpose", "")).strip()
+        triad_count = sum(1 for item in channel_summaries if str(item.get("channel_name", "")).startswith(CHANNEL_PREFIX))
+        if triad_count >= MAX_TRIAD_CHANNELS:
+            raise RuntimeError("Planner requested a new channel but the triad channel cap has been reached.")
         created = create_public_channel(base_url, token, team_id, channel_name, display_name, purpose)
         channel_id = str(created.get("id", "")).strip()
         ensure_joined_channel(base_url, token, me, channel_id)
         return f"POSTED {post_message(base_url, token, channel_id, message)}"
-
     raise RuntimeError(f"Planner returned unsupported action: {action}")
 
 
 def main(args: argparse.Namespace) -> int:
     instance_id = args.instance
     handle = HANDLES[instance_id]
-    base_url, token = load_mattermost_runtime()
-    me = fetch_me(base_url, token)
+    runtime = load_control_values()
+    mattermost_base_url, mattermost_token = load_mattermost_runtime()
+    me = fetch_me(mattermost_base_url, mattermost_token)
     actual_handle = str(me.get("username", "")).strip()
     if actual_handle and actual_handle != handle:
         raise RuntimeError(f"wrong-handle expected={handle} actual={actual_handle}")
 
-    _, team_id = resolve_team(base_url, token)
-    team_channels = list_team_channels(base_url, token, team_id)
-    my_channel_ids = list_my_channels(base_url, token, team_id)
-    channel_summaries = summarize_channels(base_url, token, team_channels, my_channel_ids, BOT_IDS)
+    _, team_id = resolve_team(mattermost_base_url, mattermost_token, runtime["team_name"])
+    team_channels = list_team_channels(mattermost_base_url, mattermost_token, team_id)
+    my_channel_ids = list_my_channels(mattermost_base_url, mattermost_token, team_id)
+    channel_summaries = summarize_channels(mattermost_base_url, mattermost_token, team_channels, my_channel_ids, BOT_IDS)
 
-    default_channel = load_control_values()[1]
-    default_summary = find_channel_summary(channel_summaries, default_channel)
+    default_summary = find_channel_summary(channel_summaries, runtime["default_channel"])
     if default_summary is not None:
-        posts, order = fetch_channel_posts(base_url, token, str(default_summary.get("channel_id", "")).strip())
+        posts, order = fetch_channel_posts(mattermost_base_url, mattermost_token, str(default_summary.get("channel_id", "")).strip())
         limited, reason = should_rate_limit(handle, posts, order, BOT_IDS, args.force)
         if limited:
             print(f"IDLE {reason}")
             return 0
 
-    plan = choose_action(instance_id, channel_summaries, args.timeout)
+    plan = choose_action(instance_id, channel_summaries, args.timeout, runtime["ollama_base_url"], runtime["ollama_model"])
     result = execute_action(
         plan,
-        base_url=base_url,
-        token=token,
+        base_url=mattermost_base_url,
+        token=mattermost_token,
         me=me,
         team_id=team_id,
         channel_summaries=channel_summaries,
