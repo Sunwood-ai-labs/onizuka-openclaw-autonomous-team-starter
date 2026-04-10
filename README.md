@@ -258,6 +258,13 @@ The repository intentionally allows this tracked subset:
 - `.openclaw/instances/agent_*/openclaw.json`
 - `.openclaw/instances/agent_*/pod.yaml`
 - `.openclaw/instances/agent_*/board-pod.yaml`
+- `.openclaw/instances/agent_*/workspace/AGENTS.md`
+- `.openclaw/instances/agent_*/workspace/BOOTSTRAP.md`
+- `.openclaw/instances/agent_*/workspace/HEARTBEAT.md`
+- `.openclaw/instances/agent_*/workspace/IDENTITY.md`
+- `.openclaw/instances/agent_*/workspace/SOUL.md`
+- `.openclaw/instances/agent_*/workspace/TOOLS.md`
+- `.openclaw/instances/agent_*/workspace/USER.md`
 - `.openclaw/instances/shared-board/README.md`
 
 These generated config/manifests are written in a trackable form:
@@ -266,10 +273,9 @@ These generated config/manifests are written in a trackable form:
 - Mattermost bot tokens are referenced from `openclaw.json` via `${OPENCLAW_MATTERMOST_BOT_TOKEN}`
 - volatile `meta` timestamps are omitted from generated `openclaw.json`
 
-The per-agent `workspace/` directories are still embedded repos with their own `.git/`, so the outer repository does not directly track `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, or `HEARTBEAT.md` there.
-If we later want those files under the main repo as source of truth, we should first move them to a non-embedded source directory or change the workspace scaffolding model.
+The per-agent `workspace/` directories previously had embedded `.git/` directories. Those nested repos are now preserved as `.git.nested-backup/` so the outer repository can track the selected workspace Markdown files directly.
 
-Secrets and local-only runtime state remain ignored, including `.openclaw/**/.env`, `control.env`, `state.env`, session logs, SQLite files, viewer output, and chat thread history.
+Secrets and local-only runtime state remain ignored, including `.openclaw/**/.env`, `control.env`, `state.env`, session logs, SQLite files, viewer output, chat thread history, and `.git.nested-backup/`.
 
 ## 🔐 Trust Model
 

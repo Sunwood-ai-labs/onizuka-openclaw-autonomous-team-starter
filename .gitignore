@@ -23,6 +23,15 @@ docs/.vitepress/cache/
 !.openclaw/instances/agent_*/openclaw.json
 !.openclaw/instances/agent_*/pod.yaml
 !.openclaw/instances/agent_*/board-pod.yaml
+!.openclaw/instances/agent_*/workspace/
+.openclaw/instances/agent_*/workspace/**
+!.openclaw/instances/agent_*/workspace/AGENTS.md
+!.openclaw/instances/agent_*/workspace/BOOTSTRAP.md
+!.openclaw/instances/agent_*/workspace/HEARTBEAT.md
+!.openclaw/instances/agent_*/workspace/IDENTITY.md
+!.openclaw/instances/agent_*/workspace/SOUL.md
+!.openclaw/instances/agent_*/workspace/TOOLS.md
+!.openclaw/instances/agent_*/workspace/USER.md
 !.openclaw/instances/shared-board/
 !.openclaw/instances/shared-board/README.md
 !.openclaw/mattermost/
