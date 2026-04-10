@@ -243,19 +243,23 @@ def main(args: argparse.Namespace) -> int:
             return 0
 
     channel_name = str(persona.get("conversation_channel", state.get("default_channel", "triad-lab"))).strip()
+    thread = latest_other_thread(state, own_handle, channel_name)
     message = choose_text(persona, state, own_handle)
-    output = run_command(
-        [
-            "python3",
-            f"{TOOLS_DIR}/mattermost_post_message.py",
-            "--instance",
-            str(instance_id),
-            "--channel-name",
-            channel_name,
-            "--message",
-            message,
-        ]
-    )
+    command = [
+        "python3",
+        f"{TOOLS_DIR}/mattermost_post_message.py",
+        "--instance",
+        str(instance_id),
+        "--channel-name",
+        channel_name,
+        "--message",
+        message,
+    ]
+    if isinstance(thread, dict):
+        root_post_id = str(thread.get("root_post_id", "")).strip()
+        if root_post_id:
+            command.extend(["--root-post-id", root_post_id])
+    output = run_command(command)
     print(output)
     return 0
 
