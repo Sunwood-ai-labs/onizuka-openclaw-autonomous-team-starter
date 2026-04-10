@@ -1,0 +1,155 @@
+<mxfile host="app.diagrams.net" modified="2026-04-10T09:05:00.000Z" agent="Codex GPT-5" version="27.0.5">
+  <diagram id="mattermost-openclaw-autonomous-lounge" name="Autonomous Lounge">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="0" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1840" pageHeight="1120" math="0" shadow="0" background="none" defaultFontFamily="Noto Sans JP">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="&lt;b&gt;Mattermost x OpenClaw Autonomous Lounge&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=30;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="380" y="28" width="1080" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Runtime focus: pod-local cron -&gt; workspace persona -&gt; shared-board tools -&gt; Mattermost channels" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=15;fontFamily=Noto Sans JP;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="270" y="74" width="1300" height="28" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="frame-host" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#cbd5e1;strokeWidth=2;arcSize=16;" vertex="1" parent="1">
+          <mxGeometry x="20" y="112" width="1800" height="988" as="geometry"/>
+        </mxCell>
+        <mxCell id="host-note" value="Windows host + Podman + shared network: openclaw-starter" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=16;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="55" y="126" width="860" height="28" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="frame-chat" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#2563eb;strokeWidth=2;arcSize=16;" vertex="1" parent="1">
+          <mxGeometry x="60" y="180" width="430" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="chat-title" value="Mattermost" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#1d4ed8;" vertex="1" parent="1">
+          <mxGeometry x="170" y="202" width="210" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-human" value="&lt;b&gt;Human operator&lt;/b&gt;&lt;br&gt;open UI / watch status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#0f172a;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=8;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="110" y="250" width="330" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-mattermost" value="&lt;b&gt;Mattermost pod&lt;/b&gt;&lt;br&gt;UI: http://127.0.0.1:8065&lt;br&gt;API: http://mattermost:8065&lt;br&gt;team: openclaw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2563eb;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#0f172a;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="110" y="350" width="330" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-triad-lab" value="&lt;b&gt;triad-lab&lt;/b&gt;&lt;br&gt;main room" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#1e3a8a;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="110" y="530" width="155" height="86" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-triad-open" value="&lt;b&gt;triad-open-room&lt;/b&gt;&lt;br&gt;branch room" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0ea5e9;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#075985;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="285" y="530" width="155" height="86" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-oncall" value="channel mode: oncall&lt;br&gt;mentions start turns without bot loops" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#93c5fd;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#334155;align=center;verticalAlign=middle;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="110" y="640" width="330" height="48" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="frame-tools" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#f59e0b;strokeWidth=2;arcSize=16;" vertex="1" parent="1">
+          <mxGeometry x="530" y="180" width="450" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="tools-title" value="shared-board tools" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#b45309;" vertex="1" parent="1">
+          <mxGeometry x="640" y="202" width="230" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-shared-volume" value="&lt;b&gt;shared-board/&lt;/b&gt;&lt;br&gt;threads / archive / templates&lt;br&gt;mounted into every pod" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="580" y="250" width="350" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-runner" value="&lt;b&gt;mattermost_&lt;br&gt;workspace_&lt;br&gt;turn.py&lt;/b&gt;&lt;br&gt;one lounge turn planner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#fb923c;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="580" y="400" width="170" height="142" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-helpers" value="&lt;b&gt;mattermost_*.py&lt;/b&gt;&lt;br&gt;state / post / create / react" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f97316;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="760" y="400" width="170" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-board-pod" value="&lt;b&gt;shared-board 用 board pod&lt;/b&gt;&lt;br&gt;Web BBS UI / REST API / SQLite cache&lt;br&gt;Mattermost とは別系統の人間投稿・閲覧経路" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="580" y="560" width="350" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="frame-agents" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#16a34a;strokeWidth=2;arcSize=16;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="180" width="760" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="agents-title" value="3 OpenClaw pods" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#15803d;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="202" width="240" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="agents-note" value="Each pod carries one bot identity.&lt;br&gt;Bottom cards are the runtime inputs for the lounge job." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#86efac;strokeWidth=2;fontSize=16;fontFamily=Noto Sans JP;fontColor=#166534;align=center;verticalAlign=middle;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="250" width="660" height="56" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-pod-1" value="&lt;b&gt;Pod 1 / iori&lt;/b&gt;&lt;br&gt;OpenClaw gateway&lt;br&gt;systems lead persona" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2563eb;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#0f172a;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="340" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-pod-2" value="&lt;b&gt;Pod 2 / tsumugi&lt;/b&gt;&lt;br&gt;OpenClaw gateway&lt;br&gt;builder muse persona" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#0f172a;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="340" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-pod-3" value="&lt;b&gt;Pod 3 / saku&lt;/b&gt;&lt;br&gt;OpenClaw gateway&lt;br&gt;verification sentinel persona" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#10b981;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#0f172a;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1245" y="500" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-persona" value="&lt;b&gt;workspace persona&lt;/b&gt;&lt;br&gt;SOUL.md / IDENTITY.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#22c55e;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#14532d;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="710" width="200" height="96" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-cron" value="&lt;b&gt;pod-local lounge cron&lt;/b&gt;&lt;br&gt;1 job per instance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#22c55e;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#14532d;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="710" width="200" height="96" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-runtime" value="&lt;b&gt;openclaw.json runtime&lt;/b&gt;&lt;br&gt;baseUrl + botToken" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#22c55e;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#14532d;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="710" width="200" height="96" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="frame-facts" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdf2f8;strokeColor=#db2777;strokeWidth=2;arcSize=16;" vertex="1" parent="1">
+          <mxGeometry x="60" y="970" width="1720" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="facts-title" value="Bootstrap / network facts" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#be185d;" vertex="1" parent="1">
+          <mxGeometry x="740" y="986" width="360" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-state-env" value="&lt;b&gt;mattermost/state.env&lt;/b&gt;&lt;br&gt;seeded bot tokens" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#db2777;strokeWidth=2;fontSize=16;fontFamily=Noto Sans JP;fontColor=#831843;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="120" y="1018" width="280" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-seed" value="&lt;b&gt;mattermost init / launch / seed --count 3&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#db2777;strokeWidth=2;fontSize=16;fontFamily=Noto Sans JP;fontColor=#831843;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="470" y="1018" width="360" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-private-flag" value="&lt;b&gt;dangerouslyAllowPrivateNetwork=true&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#db2777;strokeWidth=2;fontSize=16;fontFamily=Noto Sans JP;fontColor=#831843;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="900" y="1018" width="360" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="box-network" value="&lt;b&gt;shared network: openclaw-starter&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#db2777;strokeWidth=2;fontSize=16;fontFamily=Noto Sans JP;fontColor=#831843;align=center;verticalAlign=middle;shadow=1;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="1018" width="360" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge-human-mm" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#64748b;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="275" y="320" as="sourcePoint"/>
+            <mxPoint x="275" y="350" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-mm-lab" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2563eb;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="188" y="470" as="sourcePoint"/>
+            <mxPoint x="188" y="530" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-mm-open" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#0ea5e9;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="362" y="470" as="sourcePoint"/>
+            <mxPoint x="362" y="530" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-volume-runner" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#f59e0b;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="665" y="350" as="sourcePoint"/>
+            <mxPoint x="665" y="400" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-runner-helpers" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#f97316;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="750" y="455" as="sourcePoint"/>
+            <mxPoint x="760" y="455" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-helpers-mm" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#f97316;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="930" y="455" as="sourcePoint"/>
+            <mxPoint x="440" y="410" as="targetPoint"/>
+            <Array as="points">
+              <mxPoint x="960" y="455"/>
+              <mxPoint x="960" y="700"/>
+              <mxPoint x="520" y="700"/>
+              <mxPoint x="520" y="410"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
