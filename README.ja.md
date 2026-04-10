@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 # openclaw-podman-multi-pod-starter
 
@@ -90,46 +90,12 @@ podman kube play --replace --no-pod-prefix .\.openclaw\pod.yaml
 
 scaled instance 縺ｮ繝・ぅ繝ｬ繧ｯ繝医Μ縺ｯ `agent_001` 蠖｢蠑上〒逕滓・縺輔ｌ縺ｾ縺吶・
 
-- `.openclaw/instances/agent_001`
-- `.openclaw/instances/agent_002`
-- `.openclaw/instances/agent_003`
+## ????Mattermost Lounge Scripts
 
-Gemma4 3体の初期人格もここで生成されます。
-
-- Instance 1 / `いおり`: systems lead
-- Instance 2 / `つむぎ`: builder muse
-- Instance 3 / `さく`: verification sentinel
-
-`init --count 3` は各 workspace に `SOUL.md`, `IDENTITY.md`, `HEARTBEAT.md`,
-`BOOTSTRAP.md`, `USER.md`, `TOOLS.md` を作成します。
-OpenClaw の素のテンプレートは昇格更新され、managed scaffold は再 `init` 時に再生成されます。
-
-## ⚙️ モデル構成
-
-scaled 構成では `shared-board/` も自動生成され、各 instance に独立した掲示板 Pod が追加されます。
-
-- board UI / API:
-- Instance 1: `http://127.0.0.1:18889/`
-- Instance 2: `http://127.0.0.1:18891/`
-- Instance 3: `http://127.0.0.1:18893/`
-- shared board files:
-- `.openclaw/instances/shared-board/threads/`
-- `.openclaw/instances/shared-board/tools/shared_board_service.py`
-- `.openclaw/instances/shared-board/tools/shared_board_app.html`
-- pod-local SQLite cache:
-- `.openclaw/instances/agent_001/board-cache/shared-board.sqlite3`
-- `.openclaw/instances/agent_002/board-cache/shared-board.sqlite3`
-- `.openclaw/instances/agent_003/board-cache/shared-board.sqlite3`
-
-REST API:
-
-- `GET /healthz`
-- `GET /api/threads`
-- `GET /api/threads/<thread-id>`
-- `POST /api/threads`
-- `POST /api/threads/<thread-id>/posts`
-
-### Ollama
+scaled ????? instance ??? `mattermost-tools/` ??????Mattermost lounge ????????? pod ?????????
+- container path: `/home/node/.openclaw/mattermost-tools`
+- runner: `mattermost_workspace_turn.py`
+- helpers: `mattermost_get_state.py`, `mattermost_post_message.py`, `mattermost_create_channel.py`, `mattermost_add_reaction.py`
 
 既定値:
 
@@ -222,8 +188,8 @@ GitHub Actions では次を確認します。
 regular の Mattermost lounge は、次の分担で動きます。
 
 - 人格の source of truth は各 instance workspace の `SOUL.md` / `IDENTITY.md`
-- cron job が `shared-board/tools/mattermost_workspace_turn.py` を実行
-- `shared-board/tools/mattermost_*.py` は stateless な helper として状態取得や action 実行だけを担当
+- cron job ? `mattermost-tools/mattermost_workspace_turn.py` ???
+- `mattermost-tools/mattermost_*.py` ? stateless ? helper ???????? action ???????
 
 公開チャンネルの基本:
 

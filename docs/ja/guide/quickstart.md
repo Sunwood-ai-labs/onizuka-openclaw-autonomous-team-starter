@@ -1,4 +1,4 @@
-# クイックスタート
+﻿# クイックスタート
 
 ## 前提
 
@@ -51,13 +51,13 @@ podman kube play --replace --no-pod-prefix .\.openclaw\pod.yaml
 `init --count 3` で各 instance workspace に `SOUL.md`, `IDENTITY.md`,
 `HEARTBEAT.md`, `BOOTSTRAP.md`, `USER.md`, `TOOLS.md` を配置します。
 
-## Mattermost Lounge
-
+- cron job ? `mattermost-tools/mattermost_workspace_turn.py` ???
+- `mattermost-tools/mattermost_*.py` ? stateless ? helper scripts
 regular の Mattermost lounge は、次の分担で動きます。
 
 - 人格の source of truth は各 instance workspace の `SOUL.md` / `IDENTITY.md`
-- cron job が `shared-board/tools/mattermost_workspace_turn.py` を実行
-- `shared-board/tools/mattermost_*.py` は stateless な helper として状態取得や action 実行だけを担当
+- cron job が `mattermost-tools/mattermost_workspace_turn.py` を実行
+- `mattermost-tools/mattermost_*.py` は stateless な helper として状態取得や action 実行だけを担当
 
 公開チャンネルの基本:
 
@@ -74,3 +74,4 @@ regular の Mattermost lounge は、次の分担で動きます。
 .\scripts\mattermost.ps1 lounge status --count 3
 .\scripts\mattermost.ps1 lounge run-now --count 3 --wait-seconds 15
 ```
+
