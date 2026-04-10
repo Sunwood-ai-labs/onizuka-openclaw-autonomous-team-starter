@@ -8,7 +8,7 @@
         <mxCell id="title" value="&lt;b&gt;Mattermost x OpenClaw Autonomous Lounge&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=30;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#0f172a;" vertex="1" parent="1">
           <mxGeometry x="380" y="28" width="1080" height="40" as="geometry"/>
         </mxCell>
-        <mxCell id="subtitle" value="Runtime focus: pod-local cron -&gt; workspace persona -&gt; shared-board tools -&gt; Mattermost channels" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=15;fontFamily=Noto Sans JP;fontColor=#475569;" vertex="1" parent="1">
+        <mxCell id="subtitle" value="Runtime focus: pod-local cron -&gt; workspace persona -&gt; lounge scripts -&gt; Mattermost channels" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=15;fontFamily=Noto Sans JP;fontColor=#475569;" vertex="1" parent="1">
           <mxGeometry x="270" y="74" width="1300" height="28" as="geometry"/>
         </mxCell>
 
@@ -47,7 +47,7 @@
         <mxCell id="tools-title" value="Mattermost lounge tools" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontFamily=Noto Sans JP;fontColor=#b45309;" vertex="1" parent="1">
           <mxGeometry x="605" y="202" width="300" height="34" as="geometry"/>
         </mxCell>
-        <mxCell id="box-shared-volume" value="&lt;b&gt;mounted tool path&lt;/b&gt;&lt;br&gt;/home/node/.openclaw/shared-board/tools&lt;br&gt;runner and helpers are available in each pod" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+        <mxCell id="box-tool-mount" value="&lt;b&gt;mounted lounge scripts&lt;/b&gt;&lt;br&gt;runner and helpers are available inside each pod&lt;br&gt;Mattermost turns use this script set" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
           <mxGeometry x="580" y="250" width="350" height="118" as="geometry"/>
         </mxCell>
         <mxCell id="box-runner" value="&lt;b&gt;mattermost_&lt;br&gt;workspace_&lt;br&gt;turn.py&lt;/b&gt;&lt;br&gt;one lounge turn planner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#fb923c;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
@@ -56,7 +56,7 @@
         <mxCell id="box-helpers" value="&lt;b&gt;mattermost_*.py&lt;/b&gt;&lt;br&gt;state / post / create / react" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f97316;strokeWidth=2;fontSize=17;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
           <mxGeometry x="760" y="400" width="170" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="box-board-pod" value="&lt;b&gt;responsibility split&lt;/b&gt;&lt;br&gt;runner reads workspace persona and decides one turn&lt;br&gt;helpers only execute Mattermost API actions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
+        <mxCell id="box-role-split" value="&lt;b&gt;responsibility split&lt;/b&gt;&lt;br&gt;runner reads workspace persona and decides one turn&lt;br&gt;helpers only execute Mattermost API actions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f59e0b;strokeWidth=2;fontSize=15;fontFamily=Noto Sans JP;fontColor=#7c2d12;align=left;verticalAlign=middle;spacingLeft=16;spacingRight=12;spacingTop=10;spacingBottom=8;shadow=1;arcSize=14;" vertex="1" parent="1">
           <mxGeometry x="580" y="560" width="350" height="110" as="geometry"/>
         </mxCell>
 
