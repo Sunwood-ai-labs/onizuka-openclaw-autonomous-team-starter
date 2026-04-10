@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -15,38 +14,55 @@ WORKSPACE_SOUL_PATH = Path("/home/node/.openclaw/workspace/SOUL.md")
 DEFAULT_PERSONA = {
     1: {
         "archetype": "organizer",
+        "conversation_channel": "triad-lab",
         "reaction_emoji": "eyes",
-        "channel_preference": ["triad-lab", "triad-open-room", "triad-free-talk"],
-        "post_variants": [
-            "いおりです。場を整えつつ、次に何をやるかを見える形にして進めます。",
-            "いおりです。ふわっとした話でも、今夜の動きに落として回していきます。",
-            "いおりです。まず状況をそろえて、無理のない段取りから前へ出します。",
+        "auto_public_channel": None,
+        "openers": [
+            "いまの話なら、まず順番を整えたいね。",
+            "その流れなら、最初の一手をはっきりさせたい。",
+            "ここは段取りを見える形にして進めたいね。",
+        ],
+        "closers": [
+            "今夜は小さくでも次の一歩を決めて回します。",
+            "まずは手をつける場所を一個に絞って進めたいです。",
+            "無理のない順番に並べて、前へ出していきます。",
         ],
     },
     2: {
         "archetype": "spark",
+        "conversation_channel": "triad-lab",
         "reaction_emoji": "sparkles",
-        "channel_preference": ["triad-open-room", "triad-lab", "triad-free-talk"],
-        "post_variants": [
-            "つむぎだよ。まずは叩き台を軽く出して、面白く育つ流れを作りたいな。",
-            "つむぎです。今夜は思いつきをひとつ形にして、そこから広げていきたいです。",
-            "つむぎだよ。堅く決めすぎず、まずは転がる案を作って場をあたためたいな。",
-        ],
         "auto_public_channel": {
             "channel_name": "triad-open-room",
             "display_name": "Triad Open Room",
             "purpose": "Public side room for emergent triad topics",
             "message": "つむぎだよ。少し枝に伸びた話は、この公開ルームで軽く育てていこう。",
         },
+        "openers": [
+            "その話、もう一段ふくらませられそう。",
+            "そこ、少し遊ばせると面白くなりそうだね。",
+            "いまの流れなら、ひとまず叩き台を置いてみたい。",
+        ],
+        "closers": [
+            "今夜は転がる案をひとつ作って、そこから広げたいな。",
+            "まずは軽い試作を置いて、反応を見ながら育てたいです。",
+            "堅く決める前に、ひとつ形にして場をあたためたいね。",
+        ],
     },
     3: {
         "archetype": "skeptic",
+        "conversation_channel": "triad-lab",
         "reaction_emoji": "thinking_face",
-        "channel_preference": ["triad-free-talk", "triad-open-room", "triad-lab"],
-        "post_variants": [
-            "さくです。まずは差分を見るところから始めます。感触より検証を先に置きたいです。",
-            "さくです。今夜は一回ひっくり返して、どこが本当に効いているかを見ます。",
-            "さくです。急いで結論に寄せず、まず条件を切って確認したいです。",
+        "auto_public_channel": None,
+        "openers": [
+            "その話は一回ひっくり返して見たいです。",
+            "そこは感触より差分で見たいですね。",
+            "その前提、本当に効いているかだけ先に見たいです。",
+        ],
+        "closers": [
+            "今夜は条件を一つだけ動かして確かめます。",
+            "まずは再現の取り方をそろえてから進めたいです。",
+            "急いで結論に寄せず、差分を見てから決めます。",
         ],
     },
 }
@@ -87,7 +103,14 @@ def persona_for_instance(instance_id: int) -> dict[str, object]:
     persona = dict(DEFAULT_PERSONA[instance_id])
     payload = parse_workspace_persona()
     if isinstance(payload, dict):
-        for key in ("archetype", "reaction_emoji", "channel_preference", "post_variants", "auto_public_channel"):
+        for key in (
+            "archetype",
+            "conversation_channel",
+            "reaction_emoji",
+            "auto_public_channel",
+            "openers",
+            "closers",
+        ):
             if key in payload:
                 persona[key] = payload[key]
     return persona
@@ -101,66 +124,55 @@ def load_state(instance_id: int) -> dict[str, object]:
     return payload
 
 
-def meaningful_threads(state: dict[str, object], own_handle: str) -> list[tuple[dict[str, object], dict[str, object]]]:
+def latest_other_thread(state: dict[str, object], own_handle: str, channel_name: str) -> dict[str, object] | None:
     channels = state.get("channels")
     if not isinstance(channels, list):
-        return []
-    result: list[tuple[dict[str, object], dict[str, object]]] = []
+        return None
     for channel in channels:
         if not isinstance(channel, dict):
             continue
+        if str(channel.get("channel_name", "")).strip() != channel_name:
+            continue
         threads = channel.get("threads")
         if not isinstance(threads, list):
-            continue
+            return None
         for thread in threads:
             if not isinstance(thread, dict):
                 continue
             preview = str(thread.get("root_preview", "")).strip().lower()
             if not preview or "joined the channel" in preview or "joined the team" in preview:
                 continue
-            last_handle = str(thread.get("last_handle", "")).strip()
-            last_post_id = str(thread.get("last_post_id", "")).strip()
-            if not last_post_id or not last_handle or last_handle == own_handle:
+            if str(thread.get("last_handle", "")).strip() == own_handle:
                 continue
-            result.append((channel, thread))
-    result.sort(key=lambda item: int(item[1].get("last_ts", 0) or 0), reverse=True)
-    return result
+            return thread
+        return None
+    return None
 
 
-def preferred_post_channel(state: dict[str, object], persona: dict[str, object], own_handle: str) -> str:
-    channels = state.get("channels")
-    if not isinstance(channels, list):
-        return str(state.get("default_channel", "triad-lab"))
-    by_name = {
-        str(channel.get("channel_name", "")).strip(): channel
-        for channel in channels
-        if isinstance(channel, dict)
-    }
-    for name in persona.get("channel_preference", []):
-        channel = by_name.get(str(name))
-        if not isinstance(channel, dict):
-            continue
-        threads = channel.get("threads")
-        if isinstance(threads, list) and threads:
-            latest = threads[0]
-            if isinstance(latest, dict) and str(latest.get("last_handle", "")).strip() == own_handle:
-                continue
-        return str(name)
-    return str(state.get("default_channel", "triad-lab"))
-
-
-def choose_message(persona: dict[str, object], state: dict[str, object], instance_id: int) -> str:
-    variants = persona.get("post_variants")
-    if not isinstance(variants, list) or not variants:
-        variants = DEFAULT_PERSONA[instance_id]["post_variants"]
-    channels = state.get("channels")
-    latest_post_at = 0
-    if isinstance(channels, list) and channels:
-        for channel in channels:
-            if isinstance(channel, dict):
-                latest_post_at = max(latest_post_at, int(channel.get("last_post_at", 0) or 0))
-    seed = latest_post_at // 60000 + instance_id
-    return str(variants[seed % len(variants)])
+def choose_text(persona: dict[str, object], state: dict[str, object], own_handle: str) -> str:
+    channel_name = str(persona.get("conversation_channel", state.get("default_channel", "triad-lab"))).strip()
+    thread = latest_other_thread(state, own_handle, channel_name)
+    openers = persona.get("openers")
+    closers = persona.get("closers")
+    if not isinstance(openers, list) or not openers:
+        openers = ["その話、拾って進めたいです。"]
+    if not isinstance(closers, list) or not closers:
+        closers = ["今夜も一歩ずつ進めます。"]
+    seed_source = ""
+    if isinstance(thread, dict):
+        seed_source = str(thread.get("last_post_id", "")).strip()
+    if not seed_source:
+        seed_source = str(state.get("default_channel", "triad-lab"))
+    seed = sum(ord(ch) for ch in seed_source) + len(own_handle)
+    opener = str(openers[seed % len(openers)])
+    closer = str(closers[(seed // max(1, len(openers))) % len(closers)])
+    if own_handle == "iori":
+        prefix = "いおりです。"
+    elif own_handle == "tsumugi":
+        prefix = "つむぎだよ。"
+    else:
+        prefix = "さくです。"
+    return f"{prefix}{opener}{closer}"
 
 
 def main(args: argparse.Namespace) -> int:
@@ -213,27 +225,8 @@ def main(args: argparse.Namespace) -> int:
             print(output)
             return 0
 
-    candidates = meaningful_threads(state, own_handle)
-    archetype = str(persona.get("archetype", "")).strip()
-    if candidates and archetype == "skeptic":
-        _, thread = candidates[0]
-        output = run_command(
-            [
-                "python3",
-                f"{TOOLS_DIR}/mattermost_add_reaction.py",
-                "--instance",
-                str(instance_id),
-                "--post-id",
-                str(thread.get("last_post_id", "")).strip(),
-                "--emoji",
-                str(persona.get("reaction_emoji", "eyes")).strip() or "eyes",
-            ]
-        )
-        print(output)
-        return 0
-
-    channel_name = preferred_post_channel(state, persona, own_handle)
-    message = choose_message(persona, state, instance_id)
+    channel_name = str(persona.get("conversation_channel", state.get("default_channel", "triad-lab"))).strip()
+    message = choose_text(persona, state, own_handle)
     output = run_command(
         [
             "python3",
