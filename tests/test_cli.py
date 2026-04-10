@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -263,7 +264,7 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(payload["channels"]["mattermost"]["enabled"], True)
             self.assertEqual(payload["channels"]["mattermost"]["baseUrl"], "http://mattermost:8065")
-            self.assertEqual(payload["channels"]["mattermost"]["botToken"], "${OPENCLAW_MATTERMOST_BOT_TOKEN}")
+            self.assertEqual(payload["channels"]["mattermost"]["botToken"], "test-bot-token")
             self.assertEqual(payload["channels"]["mattermost"]["chatmode"], "oncall")
             self.assertEqual(payload["channels"]["mattermost"]["groups"]["*"]["requireMention"], True)
             self.assertEqual(payload["channels"]["mattermost"]["network"]["dangerouslyAllowPrivateNetwork"], True)
@@ -309,11 +310,37 @@ class CliTests(unittest.TestCase):
             self.assertIn("ZAI_API_KEY=test-zai-key", state_env_text)
             self.assertIn("OPENCLAW_MATTERMOST_BOT_TOKEN=mm-token-1", state_env_text)
 
-            self.assertEqual(openclaw_payload["channels"]["mattermost"]["botToken"], "${OPENCLAW_MATTERMOST_BOT_TOKEN}")
+            self.assertEqual(openclaw_payload["channels"]["mattermost"]["botToken"], "mm-token-1")
             self.assertNotIn("meta", openclaw_payload)
 
             env_names = {entry["name"] for entry in pod_payload["spec"]["containers"][0]["env"]}
             self.assertEqual(env_names, {"OPENCLAW_GATEWAY_BIND"})
+
+    def test_mattermost_user_id_returns_empty_on_404(self) -> None:
+        cfg = cli.MattermostConfig(
+            env_file=Path("D:/tmp/.env"),
+            root_dir=Path("D:/tmp/.openclaw/mattermost"),
+            pod_name="mattermost-pod",
+            container_name="mattermost",
+            image="image",
+            host_port=8065,
+            publish_host="127.0.0.1",
+            network="podman",
+            base_url="http://mattermost:8065",
+            raw_env={},
+        )
+        with mock.patch.object(
+            cli,
+            "mattermost_api_request",
+            side_effect=urllib.error.HTTPError(
+                url="http://example.invalid",
+                code=404,
+                msg="Not Found",
+                hdrs=None,
+                fp=None,
+            ),
+        ):
+            self.assertEqual(cli.mattermost_user_id(cfg, "iori", "token"), "")
 
     def test_ensure_openclaw_config_supports_openrouter_model_ref(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -361,10 +388,10 @@ class CliTests(unittest.TestCase):
             payload = json.loads((cfg.config_dir / "openclaw.json").read_text(encoding="utf-8"))
 
             self.assertEqual(payload["agents"]["defaults"]["model"]["primary"], "zai/glm-5.1")
+            self.assertEqual(payload["agents"]["defaults"]["model"]["fallbacks"], ["zai/glm-4.7"])
             self.assertEqual(payload["auth"]["cooldowns"]["rateLimitedProfileRotations"], 10)
             self.assertEqual(payload["plugins"]["entries"]["zai"]["enabled"], True)
             self.assertNotIn("models", payload["agents"]["defaults"])
-            self.assertNotIn("fallbacks", payload["agents"]["defaults"]["model"])
             self.assertNotIn("models", payload)
 
     def test_ensure_openclaw_config_syncs_managed_agent_models_to_primary(self) -> None:

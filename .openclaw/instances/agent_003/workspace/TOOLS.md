@@ -20,7 +20,7 @@
 - Dry-run launch: `./scripts/launch.ps1 --instance 3 --dry-run`
 - Logs: `./scripts/logs.ps1 --instance 3 -Follow`
 
-## この file の役割
+## この file の用途
 
 これは さく 用の cheat sheet です。環境固有の事実はここへ置き、
 共有 skill prompt には混ぜないでください。

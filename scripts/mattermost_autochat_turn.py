@@ -16,6 +16,14 @@ from urllib import request as urllib_request
 CONFIG_DIR = Path("/home/node/.openclaw")
 CONTROL_ENV_PATH = CONFIG_DIR / "control.env"
 OPENCLAW_CONFIG_PATH = CONFIG_DIR / "openclaw.json"
+DEFAULT_OLLAMA_BASE_URL = "http://host.containers.internal:11434"
+DEFAULT_OLLAMA_MODEL = "gemma4:e2b"
+DEFAULT_MODEL_REF = f"ollama/{DEFAULT_OLLAMA_MODEL}"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
+RATE_LIMIT_RETRY_COUNT = 10
+RATE_LIMIT_RETRY_BASE_DELAY_SECONDS = 5
+RATE_LIMIT_RETRY_MAX_DELAY_SECONDS = 30
 
 HANDLES = {
     1: "iori",
@@ -169,15 +177,56 @@ def parse_env_file(path: Path) -> dict[str, str]:
     return values
 
 
+def resolved_model_ref(env: dict[str, str]) -> str:
+    explicit = env.get("OPENCLAW_MODEL_REF", "").strip()
+    if explicit:
+        return explicit
+    model_id = env.get("OPENCLAW_OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL).strip() or DEFAULT_OLLAMA_MODEL
+    return f"ollama/{model_id}"
+
+
+def split_model_ref(model_ref: str) -> tuple[str, str]:
+    provider, separator, model_id = model_ref.partition("/")
+    provider = provider.strip()
+    model_id = model_id.strip()
+    if not provider or not separator or not model_id:
+        raise RuntimeError(f"OPENCLAW_MODEL_REF must look like provider/model. Got: {model_ref!r}")
+    return provider, model_id
+
+
+def planner_runtime_from_env(env: dict[str, str]) -> dict[str, str]:
+    model_ref = resolved_model_ref(env)
+    provider, model_id = split_model_ref(model_ref)
+    if provider == "ollama":
+        base_url = env.get("OPENCLAW_OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL).strip() or DEFAULT_OLLAMA_BASE_URL
+        api_key = env.get("OLLAMA_API_KEY", "").strip()
+    elif provider == "openrouter":
+        base_url = env.get("OPENCLAW_OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL).strip() or DEFAULT_OPENROUTER_BASE_URL
+        api_key = env.get("OPENROUTER_API_KEY", "").strip()
+    elif provider == "zai":
+        base_url = env.get("OPENCLAW_ZAI_BASE_URL", DEFAULT_ZAI_BASE_URL).strip() or DEFAULT_ZAI_BASE_URL
+        api_key = env.get("ZAI_API_KEY", "").strip()
+    else:
+        base_url = ""
+        api_key = ""
+    return {
+        "model_ref": model_ref,
+        "model_provider": provider,
+        "model_id": model_id,
+        "model_base_url": base_url,
+        "model_api_key": api_key,
+    }
+
+
 def load_control_values() -> dict[str, str]:
     env = parse_env_file(CONTROL_ENV_PATH)
+    runtime = planner_runtime_from_env(env)
     return {
         "team_name": env.get("OPENCLAW_MATTERMOST_TEAM_NAME", "openclaw").strip() or "openclaw",
         "default_channel": env.get("OPENCLAW_MATTERMOST_CHANNEL_NAME", "triad-lab").strip() or "triad-lab",
         "OPENCLAW_MATTERMOST_OPERATOR_USERNAME": env.get("OPENCLAW_MATTERMOST_OPERATOR_USERNAME", "operator").strip() or "operator",
         "OPENCLAW_MATTERMOST_ADMIN_USERNAME": env.get("OPENCLAW_MATTERMOST_ADMIN_USERNAME", "ocadmin").strip() or "ocadmin",
-        "ollama_base_url": env.get("OPENCLAW_OLLAMA_BASE_URL", "http://host.containers.internal:11434").strip(),
-        "ollama_model": env.get("OPENCLAW_OLLAMA_MODEL", "gemma4:e2b").strip() or "gemma4:e2b",
+        **runtime,
     }
 
 
@@ -201,6 +250,18 @@ def load_mattermost_runtime() -> tuple[str, str]:
     if not base_url or not bot_token:
         raise RuntimeError("Mattermost baseUrl/botToken is missing from openclaw.json")
     return base_url, bot_token
+
+
+class RateLimitRetryError(RuntimeError):
+    def __init__(self, message: str, retry_after_seconds: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+def rate_limit_retry_delay_seconds(retry_index: int, retry_after_seconds: float | None = None) -> float:
+    if retry_after_seconds is not None and retry_after_seconds > 0:
+        return retry_after_seconds
+    return float(min(RATE_LIMIT_RETRY_BASE_DELAY_SECONDS * max(1, retry_index), RATE_LIMIT_RETRY_MAX_DELAY_SECONDS))
 
 
 def http_json(
@@ -228,6 +289,22 @@ def http_json(
             return response.status, dict(response.headers.items()), parsed
     except urllib_error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="ignore")
+        if exc.code == 429:
+            retry_after_seconds: float | None = None
+            retry_after = exc.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    retry_after_seconds = float(retry_after)
+                except ValueError:
+                    retry_after_seconds = None
+            if retry_after_seconds is None:
+                reset_header = exc.headers.get("X-RateLimit-Reset")
+                if reset_header:
+                    try:
+                        retry_after_seconds = max(0.0, (float(reset_header) / 1000.0) - time.time())
+                    except ValueError:
+                        retry_after_seconds = None
+            raise RateLimitRetryError(f"HTTP {exc.code} {url}: {body}", retry_after_seconds=retry_after_seconds) from exc
         raise RuntimeError(f"HTTP {exc.code} {url}: {body}") from exc
 
 
@@ -308,6 +385,68 @@ def ollama_generate(base_url: str, model: str, prompt: str, timeout_seconds: int
     if not response:
         raise RuntimeError("Ollama returned an empty response.")
     return response
+
+
+def openai_compatible_generate(base_url: str, model: str, prompt: str, timeout_seconds: int, api_key: str) -> str:
+    if not api_key:
+        raise RuntimeError("API key is missing for the configured OpenAI-compatible planner.")
+    for retry_index in range(RATE_LIMIT_RETRY_COUNT + 1):
+        try:
+            _, _, payload = http_json(
+                base_url.rstrip("/") + "/chat/completions",
+                method="POST",
+                headers={"Authorization": f"Bearer {api_key}"},
+                payload={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=max(60, timeout_seconds),
+            )
+        except RateLimitRetryError as exc:
+            if retry_index < RATE_LIMIT_RETRY_COUNT:
+                time.sleep(rate_limit_retry_delay_seconds(retry_index + 1, exc.retry_after_seconds))
+                continue
+            raise RuntimeError(str(exc)) from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("OpenAI-compatible response was not a JSON object.")
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise RuntimeError("OpenAI-compatible response did not include choices.")
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            raise RuntimeError("OpenAI-compatible response choice was not a JSON object.")
+        message = first_choice.get("message")
+        if not isinstance(message, dict):
+            raise RuntimeError("OpenAI-compatible response choice did not include a message.")
+        content = message.get("content")
+        if isinstance(content, str):
+            cleaned = content.strip()
+            if cleaned:
+                return cleaned
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") == "text":
+                    text = str(item.get("text", "")).strip()
+                    if text:
+                        parts.append(text)
+            cleaned = "\n".join(parts).strip()
+            if cleaned:
+                return cleaned
+        raise RuntimeError("OpenAI-compatible response returned empty content.")
+    raise RuntimeError("OpenAI-compatible response did not recover after rate-limit retries.")
+
+
+def planner_generate(provider: str, base_url: str, model: str, prompt: str, timeout_seconds: int, api_key: str) -> str:
+    if provider == "ollama":
+        return ollama_generate(base_url, model, prompt, timeout_seconds)
+    if provider in {"openrouter", "zai"}:
+        return openai_compatible_generate(base_url, model, prompt, timeout_seconds, api_key)
+    raise RuntimeError(f"Unsupported planner provider: {provider}")
 
 
 def fetch_me(base_url: str, token: str) -> dict[str, object]:
@@ -658,13 +797,22 @@ def choose_action(
     channel_summaries: list[dict[str, object]],
     default_channel: str,
     timeout_seconds: int,
-    ollama_base_url: str,
-    ollama_model: str,
+    planner_provider: str,
+    planner_base_url: str,
+    planner_model: str,
+    planner_api_key: str,
 ) -> dict[str, object]:
     prompt = build_planner_prompt(instance_id, channel_summaries, default_channel)
     for _ in range(2):
         try:
-            response = ollama_generate(ollama_base_url, ollama_model, prompt, timeout_seconds)
+            response = planner_generate(
+                planner_provider,
+                planner_base_url,
+                planner_model,
+                prompt,
+                timeout_seconds,
+                planner_api_key,
+            )
             plan = parse_planner_json(response)
         except Exception as exc:
             continue
@@ -830,8 +978,10 @@ def main(args: argparse.Namespace) -> int:
             channel_summaries,
             runtime["default_channel"],
             args.timeout,
-            runtime["ollama_base_url"],
-            runtime["ollama_model"],
+            runtime["model_provider"],
+            runtime["model_base_url"],
+            runtime["model_id"],
+            runtime["model_api_key"],
         )
         result = execute_action(
             plan,

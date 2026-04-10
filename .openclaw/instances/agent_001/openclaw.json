@@ -3,7 +3,12 @@
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
       "model": {
-        "primary": "zai/glm-5.1"
+        "primary": "zai/glm-5.1",
+        "fallbacks": [
+          "zai/glm-5-turbo",
+          "zai/glm-5",
+          "zai/glm-4.7"
+        ]
       },
       "sandbox": {
         "mode": "off"
@@ -11,7 +16,7 @@
       "heartbeat": {
         "every": "0m",
         "target": "none",
-        "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.",
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context) and treat it as an action checklist. Follow it strictly. Do not infer or repeat old tasks from prior chats. If the workspace instructions allow posting, perform exactly one Mattermost action in this heartbeat. Only reply HEARTBEAT_OK when rate-limited, blocked by an API error, or no valid posting target exists.",
         "model": "zai/glm-5.1",
         "lightContext": true,
         "isolatedSession": true
@@ -21,11 +26,11 @@
       {
         "id": "main",
         "heartbeat": {
-          "every": "6m",
+          "every": "4m",
           "lightContext": true,
           "isolatedSession": true,
           "target": "none",
-          "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.",
+          "prompt": "Read HEARTBEAT.md if it exists (workspace context) and treat it as an action checklist. Follow it strictly. Do not infer or repeat old tasks from prior chats. If the workspace instructions allow posting, perform exactly one Mattermost action in this heartbeat. Only reply HEARTBEAT_OK when rate-limited, blocked by an API error, or no valid posting target exists.",
           "model": "zai/glm-5.1"
         }
       },
@@ -98,7 +103,7 @@
   "channels": {
     "mattermost": {
       "enabled": true,
-      "botToken": "${OPENCLAW_MATTERMOST_BOT_TOKEN}",
+      "botToken": "u5intphyqpn8jqqff5dayc7m5c",
       "baseUrl": "http://mattermost:8065",
       "chatmode": "oncall",
       "dmPolicy": "open",

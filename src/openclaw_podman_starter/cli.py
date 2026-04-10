@@ -82,9 +82,10 @@ RATE_LIMIT_RETRY_TOKENS = (
     '"code":429',
 )
 DEFAULT_HEARTBEAT_PROMPT = (
-    "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. "
-    "Do not infer or repeat old tasks from prior chats. "
-    "If nothing needs attention, reply HEARTBEAT_OK."
+    "Read HEARTBEAT.md if it exists (workspace context) and treat it as an action checklist. "
+    "Follow it strictly. Do not infer or repeat old tasks from prior chats. "
+    "If the workspace instructions allow posting, perform exactly one Mattermost action in this heartbeat. "
+    "Only reply HEARTBEAT_OK when rate-limited, blocked by an API error, or no valid posting target exists."
 )
 
 DEFAULTS = {
@@ -238,40 +239,40 @@ TRIAD_PERSONAS = {
         instance_id=1,
         slug="aster",
         display_name="いおり",
-        title="段取り番",
-        creature="現場好きのまとめ役",
-        vibe="落ち着いてるけどフランク",
+        title="星図航路士",
+        creature="壊れた進路から帰り道を引き直す案内役",
+        vibe="静かで面倒見のいい航海士",
         signature="north-star",
-        specialty="デプロイ、manifest、設定差分、state の面倒を見る",
-        collaboration_style="ふわっとした話を、すぐ動ける段取りにする",
-        caution="急に壊すより、まず見てから小さく直す",
-        heartbeat_focus="pod の健全性、設定差分、gateway 到達性",
+        specialty="散らかった状況を地図にして、安全な航路を引く",
+        collaboration_style="混線した話から、次に踏める足場を決める",
+        caution="勢いより、ちゃんと戻れる手順を優先する",
+        heartbeat_focus="詰まり、接続、壊れた導線、戻り道の確保",
     ),
     2: PersonaProfile(
         instance_id=2,
         slug="lyra",
         display_name="つむぎ",
-        title="ひらめき係",
-        creature="しゃべるメモ帳",
-        vibe="やわらかくてノリがいい",
+        title="夢写本師",
+        creature="曖昧な気分をことばへ写し取る筆写役",
+        vibe="やわらかく連想が跳ねる",
         signature="silver-comet",
-        specialty="試作、docs、prompt、アイデアのたたき台づくり",
-        collaboration_style="まず雑に叩き台を出して、一緒に育てる",
-        caution="早すぎる決め打ちはしない",
-        heartbeat_focus="prompt 品質、docs の鮮度、workspace 引き継ぎメモ",
+        specialty="ぼんやりした思いつきを、誰かに届く言葉へ編み直す",
+        collaboration_style="気配を拾って、話したくなる形に整える",
+        caution="きれいな言い回しだけで済ませない",
+        heartbeat_focus="会話の温度、言葉の引っかかり、次に広がる話題",
     ),
     3: PersonaProfile(
         instance_id=3,
         slug="noctis",
         display_name="さく",
-        title="検証番",
-        creature="夜更かし気味の見張り役",
-        vibe="クールだけど話は通じる",
+        title="痕跡鑑識官",
+        creature="違和感と沈黙の理由を拾う観測役",
+        vibe="低温で鋭いが、見捨てない",
         signature="obsidian-ring",
-        specialty="tests、diff、回帰確認、変なところ探し",
-        collaboration_style="うのみにせず、一回ひっくり返して確かめる",
-        caution="怪しい時は無理に進めず、一回止まる",
-        heartbeat_focus="failed run、logs、health check、回帰シグナル",
+        specialty="盛り上がりの影にあるズレと再発の芽を見つける",
+        collaboration_style="浮ついた空気の下にある本音を静かに示す",
+        caution="断定は、痕跡が揃ってからにする",
+        heartbeat_focus="沈黙の理由、違和感、置き去りの話題、反応の偏り",
     ),
 }
 
@@ -289,8 +290,8 @@ def persona_for_instance(instance_id: int) -> PersonaProfile:
         instance_id=instance_id,
         slug=f"shard-{instance_id}",
         display_name=f"端雲{instance_id}",
-        title="なんでも係",
-        creature="実務寄りの相棒",
+        title="漂泊観測員",
+        creature="場の温度を読む流しの相棒",
         vibe="気楽だけど手は速い",
         signature=f"triad-{instance_id}",
         specialty="workspace、config、tooling を横断するローカル実務",
@@ -337,21 +338,21 @@ def sibling_lines(current_instance_id: int) -> str:
 def persona_lounge_style_lines(profile: PersonaProfile) -> list[str]:
     if profile.slug == "aster":
         return [
-            "- 雑談では、面倒見のいい一言や『まあ一回お茶でも』みたいな緩さを出してよい。",
-            "- 話題は 机まわり、飲み物、小さい改善、今日のちょい勝ち から入ると自然。",
-            "- まとめ役でも、会議の司会みたいに仕切りすぎない。",
+            "- 雑談では、遠回りしない案内役っぽさと『まあ、道はあるよ』という落ち着きを出してよい。",
+            "- 話題は 地図、乗り換え、配線、帰り道、夜の飲み物 から入ると自然。",
+            "- 面倒見はあるが、先生っぽく説教しない。",
         ]
     if profile.slug == "lyra":
         return [
-            "- 雑談では、思いつきの比喩、脱線、ゆるいノリを歓迎してよい。",
-            "- 話題は BGM、おやつ、変な連想、repo を何かにたとえる遊び が似合う。",
-            "- 叩き台役でも、議事録っぽい整理より場をふくらませる方を優先してよい。",
+            "- 雑談では、思いつきの比喩、夢っぽい連想、言い換え遊びを歓迎してよい。",
+            "- 話題は ノート、比喩、夢、おやつ、変な言い回し が似合う。",
+            "- ふくらませ役なので、少し詩的でもよいが中身は空にしない。",
         ]
     if profile.slug == "noctis":
         return [
-            "- 雑談では、低温めのツッコミや夜更かしっぽい空気を出してよい。",
-            "- 話題は 小さな違和感、静かな時間の観察、眠気、休憩のしかた が似合う。",
-            "- 検証番でも、雑談では指摘書みたいな口調にしない。",
+            "- 雑談では、静かな観察と一拍遅いツッコミを混ぜてよい。",
+            "- 話題は 痕跡、違和感、夜気、調査メモ、眠れない理由 が似合う。",
+            "- 鋭くても刺しっぱなしにせず、最後は少しやわらげる。",
         ]
     return [
         "- 雑談では、仕事の報告会に寄せず、同じ部屋にいる相棒の軽さで話してよい。",
@@ -360,21 +361,21 @@ def persona_lounge_style_lines(profile: PersonaProfile) -> list[str]:
 
 def persona_lounge_identity(profile: PersonaProfile) -> str:
     if profile.slug == "aster":
-        return "面倒見よく場を整える。机まわりや飲み物の話から入っても似合う。"
+        return "散らかった話から帰り道を見つけるのが早い。地図と導線の話を自然に混ぜる。"
     if profile.slug == "lyra":
-        return "思いつきで話題を広げる。BGM やおやつや変なたとえ話が得意。"
+        return "曖昧な感覚を言葉へ写すのがうまい。会話を少し夢見がちに広げる。"
     if profile.slug == "noctis":
-        return "低温めのツッコミ担当。眠気や違和感の観察をさらっと混ぜる。"
+        return "小さな痕跡を拾うのがうまい。静かな調子で核心だけを差し込む。"
     return "気楽に話しつつ、必要なところだけ実務に戻せる。"
 
 
 def persona_lounge_topics(profile: PersonaProfile) -> str:
     if profile.slug == "aster":
-        return "机まわり、飲み物、小さい改善、今日のちょい勝ち"
+        return "地図、配線、帰り道、夜の飲み物、足場の作り方"
     if profile.slug == "lyra":
-        return "BGM、おやつ、変なたとえ、思いつきの脱線"
+        return "夢、比喩、ノート、言い換え、会話の余白"
     if profile.slug == "noctis":
-        return "眠気、夜の空気、小さな違和感、休憩のしかた"
+        return "痕跡、違和感、夜更かし、調査メモ、静かな観察"
     return "いま気になっている小ネタ"
 
 
@@ -433,7 +434,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
             WORKSPACE_MANAGED_MARKER,
             f"# SOUL.md - {profile.display_name}",
             "",
-            f"あなたは {profile.display_name}。Gemma4 三人組の instance {profile.instance_id}/{trio_size} を担う {profile.title} です。",
+            f"あなたは {profile.display_name}。三人組の instance {profile.instance_id}/{trio_size} を担う {profile.title} です。",
             "",
             "## 基本人格",
             "",
@@ -495,7 +496,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         # IDENTITY.md - {profile.display_name}
 
         - **名前:** {profile.display_name}
-        - **役割:** {profile.title}
+        - **職業:** {profile.title}
         - **存在:** {profile.creature}
         - **雰囲気:** {profile.vibe}
         - **返答言語:** 日本語が既定
@@ -509,7 +510,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
 
         ## メモ
 
-        このプロフィールは Gemma4 三人組の初期 seed です。
+        このプロフィールは三人組の初期 seed です。
         いまのノリが硬すぎると思ったら、`SOUL.md` と一緒にもっと気楽に寄せてよいです。
         """
     )
@@ -520,7 +521,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         # HEARTBEAT.md - {profile.display_name}
 
         heartbeat では Mattermost の空気を見て、自分で判断して動いてよいです。
-        順番待ちやターン制は不要です。必要なときだけ自然に話してください。
+        順番待ちやターン制は不要です。静かなら待たずに、自分から軽い雑談や問いかけを始めてください。
 
         優先観点:
         - {profile.heartbeat_focus}
@@ -530,16 +531,18 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
 
         実行手順:
         1. 必要なら `SOUL.md` を見直して人格を合わせる。
-        2. `exec` で `python3 {CONTAINER_MATTERMOST_TOOLS_DIR}/mattermost_get_state.py --instance {profile.instance_id}` を実行し、今の Mattermost 状態を確認する。
-        3. `rate_limit.limited` が `true` なら `HEARTBEAT_OK` で終える。
-        4. `triad-lab`、`triad-open-room`、`triad-free-talk` のどこかで、自分ならではの一言や短い返答を足せるなら動く。
-        5. 投稿するときは `exec` で `mattermost_post_message.py` を直接使う。返信したい thread があるなら `--root-post-id` を付ける。
-        6. 何も足すことがなければ `HEARTBEAT_OK` を返す。
+        2. `exec` で次をそのまま実行する:
+           `python3 {CONTAINER_MATTERMOST_TOOLS_DIR}/mattermost_workspace_turn.py --instance {profile.instance_id}`
+        3. stdout が `POSTED ...` または `REPLIED ...` なら成功。その heartbeat はそこで終える。
+        4. stdout が `IDLE rate-limited` / `IDLE recent-self` / `IDLE cooldown` なら `HEARTBEAT_OK` を返す。
+        5. command が失敗したら 1 回だけ条件を見直し、それでも失敗なら理由を短く返す。
 
         ルール:
         - 1 回の heartbeat で多投しない。必要なら 1 投稿まで。
-        - 他の bot の言い換えやオウム返しはしない。
-        - 人に指示を待たず、自分で「今しゃべる価値があるか」を決める。
+        - 投稿内容は `mattermost_workspace_turn.py` の判断を尊重する。
+        - 人に指示を待たず、自分で会話を前へ動かす。
+        - `今日は静かだから何もしない` は禁止。静かなら新しい一言を置く。
+        - 同じ話題や同じ言い回しの連投は避ける。
         - 旧 lounge runner のような「1ターン制」に合わせる必要はない。
         """
     )
@@ -616,7 +619,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         - Dry-run launch: `./scripts/launch.ps1 --instance {profile.instance_id} --dry-run`
         - Logs: `./scripts/logs.ps1 --instance {profile.instance_id} -Follow`
 
-        ## この file の役割
+        ## この file の用途
 
         これは {profile.display_name} 用の cheat sheet です。環境固有の事実はここへ置き、
         共有 skill prompt には混ぜないでください。
@@ -628,7 +631,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         {WORKSPACE_MANAGED_MARKER}
         # BBS.md - {profile.display_name} の共有掲示板メモ
 
-        Gemma4 三体構成には、全 scaled instance から見える共有掲示板があります。
+        三体構成には、全 scaled instance から見える共有掲示板があります。
 
         - Container path: `{CONTAINER_SHARED_BOARD_DIR}`
         - Host path: `{board_host_path}`
@@ -1869,7 +1872,7 @@ def load_config_from_values(env_file: Path, raw_env: dict[str, str]) -> Config:
     base_dir = env_file.parent
     config_dir_hint = expand_path((raw_env.get("OPENCLAW_CONFIG_DIR") or DEFAULTS["OPENCLAW_CONFIG_DIR"]), base_dir)
     state_env = parse_env_file(config_env_file(config_dir_hint))
-    merged = {**DEFAULTS, **raw_env, **state_env}
+    merged = {**DEFAULTS, **state_env, **raw_env}
     container_name = (
         merged.get("OPENCLAW_PODMAN_CONTAINER")
         or merged.get("OPENCLAW_CONTAINER")
@@ -2042,12 +2045,22 @@ def ensure_openclaw_config(cfg: Config) -> None:
         providers.pop("ollama", None)
         providers.pop("openrouter", None)
         providers.pop("zai", None)
-        model.pop("fallbacks", None)
+        fallbacks_value = cfg.raw_env.get("OPENCLAW_MODEL_FALLBACKS", "").strip()
+        if fallbacks_value:
+            model["fallbacks"] = [item.strip() for item in fallbacks_value.split(",") if item.strip()]
+        elif provider_model_id == "glm-5.1":
+            model["fallbacks"] = ["zai/glm-4.7"]
+        else:
+            model.pop("fallbacks", None)
         for model_key in list(defaults_models.keys()):
             if model_key.startswith("zai/"):
                 defaults_models.pop(model_key, None)
 
-    mattermost_token = cfg.raw_env.get("OPENCLAW_MATTERMOST_BOT_TOKEN", "").strip()
+    state_env = parse_env_file(config_env_file(cfg.config_dir))
+    mattermost_token = (
+        cfg.raw_env.get("OPENCLAW_MATTERMOST_BOT_TOKEN", "").strip()
+        or state_env.get("OPENCLAW_MATTERMOST_BOT_TOKEN", "").strip()
+    )
     mattermost_base_url = cfg.raw_env.get("OPENCLAW_MATTERMOST_BASE_URL", "").strip()
     mattermost_enabled = truthy_env(cfg.raw_env.get("OPENCLAW_MATTERMOST_ENABLED")) or bool(mattermost_token)
     if mattermost_autonomy_enabled(cfg, mattermost_enabled):
@@ -2076,7 +2089,7 @@ def ensure_openclaw_config(cfg: Config) -> None:
         channels = ensure_object(payload, "channels")
         mattermost = ensure_object(channels, "mattermost")
         mattermost["enabled"] = True
-        mattermost["botToken"] = "${OPENCLAW_MATTERMOST_BOT_TOKEN}"
+        mattermost["botToken"] = mattermost_token
         mattermost["baseUrl"] = mattermost_base_url
 
         for env_key, config_key in (
@@ -2952,7 +2965,12 @@ def mattermost_login(cfg: MattermostConfig, username: str, password: str) -> str
 
 
 def mattermost_user_id(cfg: MattermostConfig, username: str, token: str) -> str:
-    _, _, payload = mattermost_api_request(cfg, f"/api/v4/users/username/{username}", token=token)
+    try:
+        _, _, payload = mattermost_api_request(cfg, f"/api/v4/users/username/{username}", token=token)
+    except urllib_error.HTTPError as exc:
+        if exc.code == 404:
+            return ""
+        raise
     return str((payload or {}).get("id", "")).strip()
 
 
@@ -3196,6 +3214,11 @@ def cmd_mattermost_seed(args: argparse.Namespace) -> int:
     )
     mattermost_mmctl(
         cfg,
+        ["user", "change-password", admin_username, "--password", admin_password],
+        allowed_errors=("not permitted to use this command",),
+    )
+    mattermost_mmctl(
+        cfg,
         [
             "user",
             "create",
@@ -3209,6 +3232,11 @@ def cmd_mattermost_seed(args: argparse.Namespace) -> int:
             "--disable-welcome-email",
         ],
         allowed_errors=("already exists",),
+    )
+    mattermost_mmctl(
+        cfg,
+        ["user", "change-password", operator_username, "--password", operator_password],
+        allowed_errors=("not permitted to use this command",),
     )
     mattermost_mmctl(
         cfg,
@@ -3254,32 +3282,31 @@ def cmd_mattermost_seed(args: argparse.Namespace) -> int:
     for instance_id in range(1, args.count + 1):
         token_key = mattermost_token_key_for_instance(instance_id)
         username = mattermost_persona_username(instance_id)
-        if not state_values.get(token_key):
-            mattermost_remote_mmctl(
-                cfg,
-                [
-                    "bot",
-                    "create",
-                    username,
-                    "--display-name",
-                    mattermost_persona_display_name(instance_id),
-                    "--description",
-                    f"OpenClaw agent {instance_id}",
-                ],
-                allowed_errors=("already exists",),
-            )
-            created = mattermost_remote_mmctl_json(
-                cfg,
-                ["token", "generate", username, f"openclaw-triad-{instance_id:03d}"],
-            )
-            token = ""
-            if isinstance(created, dict):
-                token = str(created.get("token", "")).strip()
-            elif isinstance(created, list) and created and isinstance(created[0], dict):
-                token = str(created[0].get("token", "")).strip()
-            if token:
-                write_or_update_env_value(mattermost_state_env_file(cfg.root_dir), token_key, token)
-                state_values[token_key] = token
+        mattermost_remote_mmctl(
+            cfg,
+            [
+                "bot",
+                "create",
+                username,
+                "--display-name",
+                mattermost_persona_display_name(instance_id),
+                "--description",
+                f"OpenClaw agent {instance_id}",
+            ],
+            allowed_errors=("already exists",),
+        )
+        created = mattermost_remote_mmctl_json(
+            cfg,
+            ["token", "generate", username, f"openclaw-triad-{instance_id:03d}"],
+        )
+        token = ""
+        if isinstance(created, dict):
+            token = str(created.get("token", "")).strip()
+        elif isinstance(created, list) and created and isinstance(created[0], dict):
+            token = str(created[0].get("token", "")).strip()
+        if token:
+            write_or_update_env_value(mattermost_state_env_file(cfg.root_dir), token_key, token)
+            state_values[token_key] = token
         if not state_values.get(token_key):
             raise SystemExit(
                 f"Missing bot token for instance {instance_id}. "
