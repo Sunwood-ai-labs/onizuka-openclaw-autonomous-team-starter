@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -22,6 +23,15 @@ mattermost_get_state = importlib.util.module_from_spec(mattermost_get_state_spec
 assert mattermost_get_state_spec and mattermost_get_state_spec.loader
 sys.modules[mattermost_get_state_spec.name] = mattermost_get_state
 mattermost_get_state_spec.loader.exec_module(mattermost_get_state)
+
+MATTERMOST_AUTOCHAT_TURN_PATH = SCRIPTS_DIR / "mattermost_autochat_turn.py"
+mattermost_autochat_turn_spec = importlib.util.spec_from_file_location(
+    "mattermost_autochat_turn", MATTERMOST_AUTOCHAT_TURN_PATH
+)
+mattermost_autochat_turn = importlib.util.module_from_spec(mattermost_autochat_turn_spec)
+assert mattermost_autochat_turn_spec and mattermost_autochat_turn_spec.loader
+sys.modules[mattermost_autochat_turn_spec.name] = mattermost_autochat_turn
+mattermost_autochat_turn_spec.loader.exec_module(mattermost_autochat_turn)
 
 
 def write_env_file(path: Path) -> None:
@@ -43,6 +53,31 @@ def write_env_file(path: Path) -> None:
 
 
 class CliTests(unittest.TestCase):
+    def build_instance(self) -> cli.ScaledInstance:
+        return cli.ScaledInstance(
+            instance_id=1,
+            pod_name="openclaw-1-pod",
+            container_name="openclaw-1",
+            config=cli.Config(
+                env_file=Path("D:/tmp/.env"),
+                container_name="openclaw-1",
+                image="image",
+                gateway_port=18789,
+                bridge_port=18790,
+                board_port=18889,
+                publish_host="127.0.0.1",
+                network="podman",
+                gateway_bind="lan",
+                userns="keep-id",
+                config_dir=Path("D:/tmp/instances/agent_001"),
+                workspace_dir=Path("D:/tmp/instances/agent_001/workspace"),
+                gateway_token="token",
+                ollama_base_url="http://127.0.0.1:11434",
+                ollama_model="gemma4:e2b",
+                board_image="python:3.11-slim",
+                raw_env={},
+            ),
+        )
     def test_mattermost_lounge_prompt_mentions_action_scripts(self) -> None:
         instance = cli.ScaledInstance(
             instance_id=1,
@@ -73,6 +108,33 @@ class CliTests(unittest.TestCase):
         self.assertIn(cli.CONTAINER_MATTERMOST_TOOLS_DIR, prompt)
         self.assertIn("workspace の `SOUL.md` / `IDENTITY.md` を source of truth", prompt)
         self.assertIn("stdout だけをそのまま返答してください", prompt)
+
+    def test_run_pod_local_agent_retries_on_rate_limit(self) -> None:
+        rate_limited_payload = json.dumps(
+            {
+                "payloads": [{"text": "⚠️ API rate limit reached. Please try again later.", "mediaUrl": None}],
+                "meta": {"stopReason": "error"},
+            }
+        )
+        success_payload = json.dumps(
+            {
+                "payloads": [{"text": "OK", "mediaUrl": None}],
+                "meta": {"stopReason": "stop"},
+            }
+        )
+        completed = [
+            mock.Mock(returncode=0, stdout=rate_limited_payload, stderr=""),
+            mock.Mock(returncode=0, stdout=success_payload, stderr=""),
+        ]
+
+        with mock.patch.object(cli, "podman_bin", return_value="podman"), mock.patch.object(
+            cli.subprocess, "run", side_effect=completed
+        ) as run_mock, mock.patch.object(cli.time, "sleep") as sleep_mock:
+            payload = cli.run_pod_local_agent(self.build_instance(), "hello", 30)
+
+        self.assertEqual(payload["payloads"][0]["text"], "OK")
+        self.assertEqual(run_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(cli.rate_limit_retry_delay_seconds(1))
 
     def test_latest_assistant_text_ignores_non_assistant_entries(self) -> None:
         payload = {
@@ -201,11 +263,206 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(payload["channels"]["mattermost"]["enabled"], True)
             self.assertEqual(payload["channels"]["mattermost"]["baseUrl"], "http://mattermost:8065")
-            self.assertEqual(payload["channels"]["mattermost"]["botToken"], "test-bot-token")
+            self.assertEqual(payload["channels"]["mattermost"]["botToken"], "${OPENCLAW_MATTERMOST_BOT_TOKEN}")
             self.assertEqual(payload["channels"]["mattermost"]["chatmode"], "oncall")
             self.assertEqual(payload["channels"]["mattermost"]["groups"]["*"]["requireMention"], True)
             self.assertEqual(payload["channels"]["mattermost"]["network"]["dangerouslyAllowPrivateNetwork"], True)
             self.assertEqual(payload["plugins"]["entries"]["mattermost"]["enabled"], True)
+
+    def test_scaled_instance_generated_files_keep_secrets_out_of_tracked_manifest_and_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            env_file = temp_root / ".env"
+            write_env_file(env_file)
+            env_text = env_file.read_text(encoding="utf-8")
+            env_text += "\n".join(
+                [
+                    "OPENCLAW_MODEL_REF=openrouter/google/gemma-3n-e2b-it:free",
+                    "OPENCLAW_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1",
+                    "OPENROUTER_API_KEY=test-openrouter-key",
+                    "ZAI_API_KEY=test-zai-key",
+                    "OPENCLAW_MATTERMOST_ENABLED=true",
+                    "OPENCLAW_MATTERMOST_BASE_URL=http://mattermost:8065",
+                    "",
+                ]
+            )
+            env_file.write_text(env_text, encoding="utf-8")
+
+            mattermost_root = temp_root / ".openclaw" / "mattermost"
+            mattermost_root.mkdir(parents=True)
+            (mattermost_root / "state.env").write_text(
+                "OPENCLAW_MATTERMOST_BOT_TOKEN_001=mm-token-1\n",
+                encoding="utf-8",
+            )
+
+            resolved = cli.ensure_scaled_instance_state(cli.scaled_instance(env_file, 1))
+            control_env_text = (resolved.config.env_file).read_text(encoding="utf-8")
+            state_env_text = (resolved.config.config_dir / ".env").read_text(encoding="utf-8")
+            openclaw_payload = json.loads((resolved.config.config_dir / "openclaw.json").read_text(encoding="utf-8"))
+            pod_payload = json.loads((resolved.config.config_dir / "pod.yaml").read_text(encoding="utf-8"))
+
+            self.assertNotIn("OPENROUTER_API_KEY=test-openrouter-key", control_env_text)
+            self.assertNotIn("ZAI_API_KEY=test-zai-key", control_env_text)
+            self.assertNotIn("OPENCLAW_MATTERMOST_BOT_TOKEN=mm-token-1", control_env_text)
+
+            self.assertIn("OPENROUTER_API_KEY=test-openrouter-key", state_env_text)
+            self.assertIn("ZAI_API_KEY=test-zai-key", state_env_text)
+            self.assertIn("OPENCLAW_MATTERMOST_BOT_TOKEN=mm-token-1", state_env_text)
+
+            self.assertEqual(openclaw_payload["channels"]["mattermost"]["botToken"], "${OPENCLAW_MATTERMOST_BOT_TOKEN}")
+            self.assertNotIn("meta", openclaw_payload)
+
+            env_names = {entry["name"] for entry in pod_payload["spec"]["containers"][0]["env"]}
+            self.assertEqual(env_names, {"OPENCLAW_GATEWAY_BIND"})
+
+    def test_ensure_openclaw_config_supports_openrouter_model_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            env_file = temp_root / ".env"
+            write_env_file(env_file)
+            env_text = env_file.read_text(encoding="utf-8")
+            env_text += "\n".join(
+                [
+                    "OPENCLAW_MODEL_REF=openrouter/google/gemma-3n-e2b-it:free",
+                    "OPENCLAW_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1",
+                    "OPENROUTER_API_KEY=test-openrouter-key",
+                    "",
+                ]
+            )
+            env_file.write_text(env_text, encoding="utf-8")
+
+            cfg = cli.ensure_state(cli.load_config(env_file))
+            payload = json.loads((cfg.config_dir / "openclaw.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["agents"]["defaults"]["model"]["primary"], "openrouter/google/gemma-3n-e2b-it:free")
+            self.assertEqual(payload["models"]["providers"]["openrouter"]["api"], "openai-completions")
+            self.assertEqual(payload["models"]["providers"]["openrouter"]["baseUrl"], "https://openrouter.ai/api/v1")
+            self.assertEqual(payload["models"]["providers"]["openrouter"]["apiKey"], "${OPENROUTER_API_KEY}")
+            self.assertEqual(payload["models"]["providers"]["openrouter"]["models"][0]["id"], "google/gemma-3n-e2b-it:free")
+            self.assertEqual(payload["plugins"]["entries"]["openrouter"]["enabled"], True)
+            self.assertNotIn("ollama", payload["models"]["providers"])
+
+    def test_ensure_openclaw_config_supports_zai_glm51_model_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            env_file = temp_root / ".env"
+            write_env_file(env_file)
+            env_text = env_file.read_text(encoding="utf-8")
+            env_text += "\n".join(
+                [
+                    "OPENCLAW_MODEL_REF=zai/glm-5.1",
+                    "ZAI_API_KEY=test-zai-key",
+                    "",
+                ]
+            )
+            env_file.write_text(env_text, encoding="utf-8")
+
+            cfg = cli.ensure_state(cli.load_config(env_file))
+            payload = json.loads((cfg.config_dir / "openclaw.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["agents"]["defaults"]["model"]["primary"], "zai/glm-5.1")
+            self.assertEqual(payload["auth"]["cooldowns"]["rateLimitedProfileRotations"], 10)
+            self.assertEqual(payload["plugins"]["entries"]["zai"]["enabled"], True)
+            self.assertNotIn("models", payload["agents"]["defaults"])
+            self.assertNotIn("fallbacks", payload["agents"]["defaults"]["model"])
+            self.assertNotIn("models", payload)
+
+    def test_ensure_openclaw_config_syncs_managed_agent_models_to_primary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            env_file = temp_root / ".env"
+            write_env_file(env_file)
+            config_dir = temp_root / ".openclaw"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            (config_dir / "openclaw.json").write_text(
+                json.dumps(
+                    {
+                        "agents": {
+                            "defaults": {"model": {"primary": "ollama/gemma4:e2b"}},
+                            "list": [
+                                {"id": "main"},
+                                {"id": "autochat-aster", "model": "ollama/gemma4:e2b"},
+                                {"id": "discuss-aster", "model": "ollama/gemma4:e2b"},
+                            ],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            env_text = env_file.read_text(encoding="utf-8")
+            env_text += "\n".join(
+                [
+                    "OPENCLAW_MODEL_REF=zai/glm-5.1",
+                    "ZAI_API_KEY=test-zai-key",
+                    "",
+                ]
+            )
+            env_file.write_text(env_text, encoding="utf-8")
+
+            cfg = cli.ensure_state(cli.load_config(env_file))
+            payload = json.loads((cfg.config_dir / "openclaw.json").read_text(encoding="utf-8"))
+            models = {entry["id"]: entry.get("model") for entry in payload["agents"]["list"]}
+
+            self.assertEqual(models["autochat-aster"], "zai/glm-5.1")
+            self.assertEqual(models["discuss-aster"], "zai/glm-5.1")
+
+    def test_mattermost_autochat_runtime_supports_openrouter(self) -> None:
+        runtime = mattermost_autochat_turn.planner_runtime_from_env(
+            {
+                "OPENCLAW_MODEL_REF": "openrouter/google/gemma-3n-e2b-it:free",
+                "OPENCLAW_OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+                "OPENROUTER_API_KEY": "test-openrouter-key",
+            }
+        )
+
+        self.assertEqual(runtime["model_provider"], "openrouter")
+        self.assertEqual(runtime["model_id"], "google/gemma-3n-e2b-it:free")
+        self.assertEqual(runtime["model_base_url"], "https://openrouter.ai/api/v1")
+        self.assertEqual(runtime["model_api_key"], "test-openrouter-key")
+
+    def test_mattermost_autochat_runtime_supports_zai(self) -> None:
+        runtime = mattermost_autochat_turn.planner_runtime_from_env(
+            {
+                "OPENCLAW_MODEL_REF": "zai/glm-5.1",
+                "OPENCLAW_ZAI_BASE_URL": "https://api.z.ai/api/coding/paas/v4",
+                "ZAI_API_KEY": "test-zai-key",
+            }
+        )
+
+        self.assertEqual(runtime["model_provider"], "zai")
+        self.assertEqual(runtime["model_id"], "glm-5.1")
+        self.assertEqual(runtime["model_base_url"], "https://api.z.ai/api/coding/paas/v4")
+        self.assertEqual(runtime["model_api_key"], "test-zai-key")
+
+    def test_openai_compatible_generate_retries_rate_limit(self) -> None:
+        payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "PLANNER_OK",
+                    }
+                }
+            ]
+        }
+        with mock.patch.object(
+            mattermost_autochat_turn,
+            "http_json",
+            side_effect=[
+                mattermost_autochat_turn.RateLimitRetryError("HTTP 429", retry_after_seconds=0),
+                (200, {}, payload),
+            ],
+        ) as http_mock, mock.patch.object(mattermost_autochat_turn.time, "sleep") as sleep_mock:
+            result = mattermost_autochat_turn.openai_compatible_generate(
+                "https://example.invalid/v1",
+                "zai/glm-5.1",
+                "prompt",
+                60,
+                "api-key",
+            )
+
+        self.assertEqual(result, "PLANNER_OK")
+        self.assertEqual(http_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(mattermost_autochat_turn.rate_limit_retry_delay_seconds(1, 0))
 
     def test_load_mattermost_config_uses_default_network(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

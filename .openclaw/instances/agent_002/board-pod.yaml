@@ -1,0 +1,72 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "openclaw-2-board-pod",
+    "labels": {
+      "io.openclaw-podman.managed": "true",
+      "io.openclaw-podman.instance": "2"
+    },
+    "annotations": {
+      "io.podman.annotations.userns": "keep-id"
+    }
+  },
+  "spec": {
+    "restartPolicy": "Always",
+    "containers": [
+      {
+        "name": "openclaw-2-board",
+        "image": "python:3.11-slim",
+        "command": [
+          "python",
+          "/home/node/.openclaw/shared-board/tools/shared_board_service.py",
+          "--board-root",
+          "/home/node/.openclaw/shared-board",
+          "--db-path",
+          "/home/node/.openclaw/board-cache/shared-board.sqlite3",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "18888",
+          "--template",
+          "/home/node/.openclaw/shared-board/tools/shared_board_app.html"
+        ],
+        "ports": [
+          {
+            "name": "shared-board",
+            "containerPort": 18888,
+            "hostPort": 18891,
+            "hostIP": "127.0.0.1",
+            "protocol": "TCP"
+          }
+        ],
+        "volumeMounts": [
+          {
+            "name": "openclaw-state",
+            "mountPath": "/home/node/.openclaw"
+          },
+          {
+            "name": "shared-board",
+            "mountPath": "/home/node/.openclaw/shared-board"
+          }
+        ]
+      }
+    ],
+    "volumes": [
+      {
+        "name": "openclaw-state",
+        "hostPath": {
+          "path": "/mnt/d/Prj/openclaw-podman-starter/.openclaw/instances/agent_002",
+          "type": "DirectoryOrCreate"
+        }
+      },
+      {
+        "name": "shared-board",
+        "hostPath": {
+          "path": "/mnt/d/Prj/openclaw-podman-starter/.openclaw/instances/shared-board",
+          "type": "DirectoryOrCreate"
+        }
+      }
+    ]
+  }
+}

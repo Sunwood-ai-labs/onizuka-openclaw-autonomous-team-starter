@@ -144,17 +144,17 @@ Autonomous lounge mode:
 .\scripts\mattermost.ps1 lounge status --count 3
 ```
 
-That mode creates pod-local jobs so `iori`, `tsumugi`, and `saku` can keep a lightweight triad conversation running inside Mattermost.
+That mode enables native heartbeat-driven chatter so `iori`, `tsumugi`, and `saku` can decide independently when to speak inside Mattermost.
 
 Current execution model:
 
-- the regular lounge cron job runs `mattermost-tools/mattermost_workspace_turn.py`
-- that runner reads the agent workspace `SOUL.md` and `IDENTITY.md` as the persona source of truth
-- helper scripts such as `mattermost_get_state.py`, `mattermost_post_message.py`, `mattermost_create_channel.py`, and `mattermost_add_reaction.py` are stateless tools only
+- each scaled OpenClaw instance uses the main agent heartbeat rather than a turn-based lounge runner
+- `HEARTBEAT.md` tells the agent to inspect Mattermost state and decide for itself whether to speak or stay quiet
+- helper scripts such as `mattermost_get_state.py`, `mattermost_post_message.py`, `mattermost_create_channel.py`, and `mattermost_add_reaction.py` remain stateless tools only
 - `triad-lab` is the primary public conversation room
 - `triad-open-room` is the optional public side room for topic sprawl or lighter branches
 
-In other words: the OpenClaw agent owns the personality, while the Python helpers only fetch state and execute Mattermost actions.
+In other words: the OpenClaw agent owns both the personality and the decision to speak, while the Python helpers only fetch state and execute Mattermost actions.
 
 ## ⚙️ Model Setups
 
@@ -245,6 +245,31 @@ This means the stack comes back automatically after Windows reboot once the user
 - `scripts/` - PowerShell wrappers
 - `reports/` - validation reports
 - `.env.example` - starter environment template
+
+## 🗂️ Versioned `.openclaw` Files
+
+Most of `.openclaw/` is still runtime state and stays ignored.
+
+The repository intentionally allows this tracked subset:
+
+- `.openclaw/openclaw.json`
+- `.openclaw/pod.yaml`
+- `.openclaw/mattermost/pod.yaml`
+- `.openclaw/instances/agent_*/openclaw.json`
+- `.openclaw/instances/agent_*/pod.yaml`
+- `.openclaw/instances/agent_*/board-pod.yaml`
+- `.openclaw/instances/shared-board/README.md`
+
+These generated config/manifests are written in a trackable form:
+
+- secrets are copied into the mounted state env file (`.openclaw/.../.env`) instead of being inlined into `pod.yaml`
+- Mattermost bot tokens are referenced from `openclaw.json` via `${OPENCLAW_MATTERMOST_BOT_TOKEN}`
+- volatile `meta` timestamps are omitted from generated `openclaw.json`
+
+The per-agent `workspace/` directories are still embedded repos with their own `.git/`, so the outer repository does not directly track `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, or `HEARTBEAT.md` there.
+If we later want those files under the main repo as source of truth, we should first move them to a non-embedded source directory or change the workspace scaffolding model.
+
+Secrets and local-only runtime state remain ignored, including `.openclaw/**/.env`, `control.env`, `state.env`, session logs, SQLite files, viewer output, and chat thread history.
 
 ## 🔐 Trust Model
 

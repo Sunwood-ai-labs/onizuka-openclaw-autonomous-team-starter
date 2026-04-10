@@ -1,0 +1,70 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "mattermost-pod",
+    "labels": {
+      "io.openclaw-podman.managed": "true",
+      "io.openclaw-podman.instance": "mattermost"
+    },
+    "annotations": {
+      "io.podman.annotations.userns": "keep-id"
+    }
+  },
+  "spec": {
+    "restartPolicy": "Always",
+    "containers": [
+      {
+        "name": "mattermost",
+        "image": "docker.io/mattermost/mattermost-preview:11.5.1",
+        "ports": [
+          {
+            "name": "web",
+            "containerPort": 8065,
+            "hostPort": 8065,
+            "hostIP": "127.0.0.1",
+            "protocol": "TCP"
+          }
+        ],
+        "env": [
+          {
+            "name": "MM_SERVICESETTINGS_LISTENADDRESS",
+            "value": ":8065"
+          },
+          {
+            "name": "MM_SERVICESETTINGS_SITEURL",
+            "value": "http://127.0.0.1:8065"
+          },
+          {
+            "name": "MM_SERVICESETTINGS_ENABLELOCALMODE",
+            "value": "true"
+          },
+          {
+            "name": "MM_SERVICESETTINGS_ENABLEDEVELOPER",
+            "value": "true"
+          },
+          {
+            "name": "MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION",
+            "value": "true"
+          },
+          {
+            "name": "MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS",
+            "value": "true"
+          },
+          {
+            "name": "MM_TEAMSETTINGS_ENABLEOPENSERVER",
+            "value": "true"
+          },
+          {
+            "name": "MM_TEAMSETTINGS_TEAMMATENAMEDISPLAY",
+            "value": "full_name"
+          },
+          {
+            "name": "MM_LOGSETTINGS_CONSOLELEVEL",
+            "value": "INFO"
+          }
+        ]
+      }
+    ]
+  }
+}

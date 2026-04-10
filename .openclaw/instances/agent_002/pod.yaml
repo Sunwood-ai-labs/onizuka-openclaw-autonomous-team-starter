@@ -1,0 +1,60 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "openclaw-2-pod",
+    "labels": {
+      "io.openclaw-podman.managed": "true",
+      "io.openclaw-podman.instance": "2"
+    },
+    "annotations": {
+      "io.podman.annotations.userns": "keep-id"
+    }
+  },
+  "spec": {
+    "restartPolicy": "Always",
+    "containers": [
+      {
+        "name": "openclaw-2",
+        "image": "ghcr.io/openclaw/openclaw:2026.4.5",
+        "ports": [
+          {
+            "name": "gateway",
+            "containerPort": 18789,
+            "hostPort": 18791,
+            "hostIP": "127.0.0.1",
+            "protocol": "TCP"
+          },
+          {
+            "name": "bridge",
+            "containerPort": 18790,
+            "hostPort": 18792,
+            "hostIP": "127.0.0.1",
+            "protocol": "TCP"
+          }
+        ],
+        "env": [
+          {
+            "name": "OPENCLAW_GATEWAY_BIND",
+            "value": "lan"
+          }
+        ],
+        "volumeMounts": [
+          {
+            "name": "openclaw-state",
+            "mountPath": "/home/node/.openclaw"
+          }
+        ]
+      }
+    ],
+    "volumes": [
+      {
+        "name": "openclaw-state",
+        "hostPath": {
+          "path": "/mnt/d/Prj/openclaw-podman-starter/.openclaw/instances/agent_002",
+          "type": "DirectoryOrCreate"
+        }
+      }
+    ]
+  }
+}

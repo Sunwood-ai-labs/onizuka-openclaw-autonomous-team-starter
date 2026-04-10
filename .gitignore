@@ -5,10 +5,25 @@ __pycache__/
 *.log
 .env
 .state/
-.openclaw/
+.openclaw/**
 .openclaw-*/
 workspace/
 logs/
 node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+
+# Keep runtime OpenClaw state ignored by default, but allow a sanitized
+# generated subset that is safe to version plus board scaffolds.
+!.openclaw/
+!.openclaw/openclaw.json
+!.openclaw/pod.yaml
+!.openclaw/instances/
+!.openclaw/instances/agent_*/
+!.openclaw/instances/agent_*/openclaw.json
+!.openclaw/instances/agent_*/pod.yaml
+!.openclaw/instances/agent_*/board-pod.yaml
+!.openclaw/instances/shared-board/
+!.openclaw/instances/shared-board/README.md
+!.openclaw/mattermost/
+!.openclaw/mattermost/pod.yaml

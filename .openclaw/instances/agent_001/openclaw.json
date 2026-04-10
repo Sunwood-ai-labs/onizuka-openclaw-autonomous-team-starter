@@ -1,0 +1,122 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/node/.openclaw/workspace",
+      "model": {
+        "primary": "zai/glm-5.1"
+      },
+      "sandbox": {
+        "mode": "off"
+      },
+      "heartbeat": {
+        "every": "0m",
+        "target": "none",
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.",
+        "model": "zai/glm-5.1",
+        "lightContext": true,
+        "isolatedSession": true
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "heartbeat": {
+          "every": "6m",
+          "lightContext": true,
+          "isolatedSession": true,
+          "target": "none",
+          "prompt": "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.",
+          "model": "zai/glm-5.1"
+        }
+      },
+      {
+        "id": "autochat-aster",
+        "name": "autochat-aster",
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/autochat-aster/agent",
+        "model": "zai/glm-5.1"
+      },
+      {
+        "id": "discuss-aster",
+        "name": "discuss-aster",
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/discuss-aster/agent",
+        "model": "zai/glm-5.1"
+      },
+      {
+        "id": "mattermost-lounge-iori",
+        "name": "mattermost-lounge-iori",
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/mattermost-lounge-iori/agent",
+        "model": "zai/glm-5.1"
+      },
+      {
+        "id": "persona-verify-iori",
+        "name": "persona-verify-iori",
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/persona-verify-iori/agent",
+        "model": "zai/glm-5.1"
+      }
+    ]
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "allowedOrigins": [
+        "http://127.0.0.1:18789",
+        "http://localhost:18789"
+      ]
+    }
+  },
+  "tools": {
+    "profile": "full",
+    "fs": {
+      "workspaceOnly": false
+    },
+    "exec": {
+      "applyPatch": {
+        "workspaceOnly": false
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "ollama": {
+        "enabled": false
+      },
+      "zai": {
+        "enabled": true
+      },
+      "mattermost": {
+        "enabled": true
+      },
+      "openrouter": {
+        "enabled": false
+      }
+    }
+  },
+  "channels": {
+    "mattermost": {
+      "enabled": true,
+      "botToken": "${OPENCLAW_MATTERMOST_BOT_TOKEN}",
+      "baseUrl": "http://mattermost:8065",
+      "chatmode": "oncall",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "replyToMode": "all",
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      },
+      "network": {
+        "dangerouslyAllowPrivateNetwork": true
+      }
+    }
+  },
+  "auth": {
+    "cooldowns": {
+      "rateLimitedProfileRotations": 10
+    }
+  }
+}

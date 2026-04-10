@@ -36,6 +36,8 @@ STATE_ENV_NAME = ".env"
 DEFAULT_OLLAMA_MODEL_ID = "gemma4:e2b"
 DEFAULT_MODEL_REF = f"ollama/{DEFAULT_OLLAMA_MODEL_ID}"
 DEFAULT_OLLAMA_BASE_URL = "http://host.containers.internal:11434"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
 DEFAULT_CONTEXT_WINDOW = 131072
 DEFAULT_PODMAN_NETWORK = "openclaw-starter"
 DEFAULT_SCALE_INSTANCE_ROOT = "./.openclaw/instances"
@@ -68,6 +70,22 @@ MATTERMOST_ICON_FILENAMES = {
     2: "tsumugi.png",
     3: "saku.png",
 }
+RATE_LIMIT_RETRY_COUNT = 10
+RATE_LIMIT_RETRY_BASE_DELAY_SECONDS = 5
+RATE_LIMIT_RETRY_MAX_DELAY_SECONDS = 30
+RATE_LIMIT_RETRY_TOKENS = (
+    "rate limit",
+    "rate-limited",
+    "too many requests",
+    "temporarily overloaded",
+    "service may be temporarily overloaded",
+    '"code":429',
+)
+DEFAULT_HEARTBEAT_PROMPT = (
+    "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. "
+    "Do not infer or repeat old tasks from prior chats. "
+    "If nothing needs attention, reply HEARTBEAT_OK."
+)
 
 DEFAULTS = {
     "OPENCLAW_CONTAINER": "openclaw",
@@ -83,13 +101,17 @@ DEFAULTS = {
     "OPENCLAW_PODMAN_USERNS": "keep-id",
     "OPENCLAW_CONFIG_DIR": "./.openclaw",
     "OPENCLAW_WORKSPACE_DIR": "./.openclaw/workspace",
+    "OPENCLAW_MODEL_REF": DEFAULT_MODEL_REF,
     "OPENCLAW_OLLAMA_BASE_URL": DEFAULT_OLLAMA_BASE_URL,
     "OPENCLAW_OLLAMA_MODEL": DEFAULT_OLLAMA_MODEL_ID,
+    "OPENCLAW_OPENROUTER_BASE_URL": DEFAULT_OPENROUTER_BASE_URL,
+    "OPENCLAW_ZAI_BASE_URL": DEFAULT_ZAI_BASE_URL,
     "OPENCLAW_SCALE_INSTANCE_ROOT": DEFAULT_SCALE_INSTANCE_ROOT,
     "OPENCLAW_SCALE_GATEWAY_PORT_START": str(DEFAULT_SCALE_GATEWAY_PORT_START),
     "OPENCLAW_SCALE_BRIDGE_PORT_START": str(DEFAULT_SCALE_BRIDGE_PORT_START),
     "OPENCLAW_SCALE_BOARD_PORT_START": str(DEFAULT_SCALE_BOARD_PORT_START),
     "OPENCLAW_SCALE_PORT_STEP": str(DEFAULT_SCALE_PORT_STEP),
+    "OPENCLAW_AUTH_RATE_LIMITED_PROFILE_ROTATIONS": "10",
     "OPENCLAW_BOARD_IMAGE": DEFAULT_BOARD_IMAGE,
     "OPENCLAW_MATTERMOST_DIR": DEFAULT_MATTERMOST_DIR,
     "OPENCLAW_MATTERMOST_CONTAINER": DEFAULT_MATTERMOST_CONTAINER_NAME,
@@ -108,6 +130,10 @@ DEFAULTS = {
     "OPENCLAW_MATTERMOST_TEAM_DISPLAY_NAME": "OpenClaw Lab",
     "OPENCLAW_MATTERMOST_CHANNEL_NAME": DEFAULT_MATTERMOST_CHANNEL_NAME,
     "OPENCLAW_MATTERMOST_CHANNEL_DISPLAY_NAME": "Triad Lab",
+    "OPENCLAW_MATTERMOST_AUTONOMY_ENABLED": "false",
+    "OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL": "6m",
+    "OPENCLAW_MATTERMOST_AUTONOMY_LIGHT_CONTEXT": "true",
+    "OPENCLAW_MATTERMOST_AUTONOMY_ISOLATED_SESSION": "true",
     "OPENCLAW_MATTERMOST_ADMIN_USERNAME": "ocadmin",
     "OPENCLAW_MATTERMOST_ADMIN_EMAIL": "ocadmin@openclaw.local",
     "OPENCLAW_MATTERMOST_OPERATOR_USERNAME": "operator",
@@ -119,7 +145,14 @@ RUNTIME_ENV_EXACT = {
     "OPENCLAW_GATEWAY_BIND",
 }
 
-RUNTIME_ENV_SUFFIXES = ("_API_KEY",)
+SECRET_ENV_EXACT = {
+    "OPENCLAW_GATEWAY_TOKEN",
+    "OPENCLAW_MATTERMOST_BOT_TOKEN",
+    MATTERMOST_ADMIN_PASSWORD_KEY,
+    MATTERMOST_OPERATOR_PASSWORD_KEY,
+}
+
+SECRET_ENV_SUFFIXES = ("_API_KEY",)
 
 
 @dataclass
@@ -486,12 +519,28 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         {WORKSPACE_MANAGED_MARKER}
         # HEARTBEAT.md - {profile.display_name}
 
-        # 空または comment のみなら heartbeat API は無効です。
-        # heartbeat を使うなら、{profile.display_name} は次を優先してください:
-        # - {profile.heartbeat_focus}
-        # - pod `{pod_name}`
-        # - gateway `{gateway_url}`
-        # - model `{model_ref}`
+        heartbeat では Mattermost の空気を見て、自分で判断して動いてよいです。
+        順番待ちやターン制は不要です。必要なときだけ自然に話してください。
+
+        優先観点:
+        - {profile.heartbeat_focus}
+        - pod `{pod_name}`
+        - gateway `{gateway_url}`
+        - model `{model_ref}`
+
+        実行手順:
+        1. 必要なら `SOUL.md` を見直して人格を合わせる。
+        2. `exec` で `python3 {CONTAINER_MATTERMOST_TOOLS_DIR}/mattermost_get_state.py --instance {profile.instance_id}` を実行し、今の Mattermost 状態を確認する。
+        3. `rate_limit.limited` が `true` なら `HEARTBEAT_OK` で終える。
+        4. `triad-lab`、`triad-open-room`、`triad-free-talk` のどこかで、自分ならではの一言や短い返答を足せるなら動く。
+        5. 投稿するときは `exec` で `mattermost_post_message.py` を直接使う。返信したい thread があるなら `--root-post-id` を付ける。
+        6. 何も足すことがなければ `HEARTBEAT_OK` を返す。
+
+        ルール:
+        - 1 回の heartbeat で多投しない。必要なら 1 投稿まで。
+        - 他の bot の言い換えやオウム返しはしない。
+        - 人に指示を待たず、自分で「今しゃべる価値があるか」を決める。
+        - 旧 lounge runner のような「1ターン制」に合わせる必要はない。
         """
     )
 
@@ -853,29 +902,51 @@ def run_pod_local_agent(
     if session_id:
         command.extend(["--session-id", session_id])
     command.extend(["--message", prompt])
-    completed = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    if completed.returncode != 0:
-        raise SystemExit(
-            f"pod-local agent failed for instance {instance.instance_id}\n"
-            f"command: {command_for_display(command)}\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
+    for retry_index in range(RATE_LIMIT_RETRY_COUNT + 1):
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
         )
+        raw_output = "\n".join(part for part in (completed.stdout.strip(), completed.stderr.strip()) if part)
+        if completed.returncode != 0:
+            if retry_index < RATE_LIMIT_RETRY_COUNT and is_rate_limited_text(raw_output):
+                time.sleep(rate_limit_retry_delay_seconds(retry_index + 1))
+                continue
+            raise SystemExit(
+                f"pod-local agent failed for instance {instance.instance_id}\n"
+                f"command: {command_for_display(command)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
 
-    outputs = [completed.stdout.strip(), completed.stderr.strip()]
-    outputs = [output for output in outputs if output]
-    if not outputs:
-        raise SystemExit(
-            f"pod-local agent returned no output for instance {instance.instance_id}\n"
-            f"command: {command_for_display(command)}"
-        )
+        outputs = [completed.stdout.strip(), completed.stderr.strip()]
+        outputs = [output for output in outputs if output]
+        if not outputs:
+            raise SystemExit(
+                f"pod-local agent returned no output for instance {instance.instance_id}\n"
+                f"command: {command_for_display(command)}"
+            )
 
+        payload = parse_json_payload_from_outputs(outputs)
+        if payload is None:
+            raise SystemExit(
+                f"pod-local agent returned non-JSON output for instance {instance.instance_id}\n"
+                f"command: {command_for_display(command)}\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        if retry_index < RATE_LIMIT_RETRY_COUNT and payload_is_rate_limited(payload):
+            time.sleep(rate_limit_retry_delay_seconds(retry_index + 1))
+            continue
+        return payload
+
+    raise SystemExit(f"rate-limit retry loop exhausted for instance {instance.instance_id}")
+
+
+def parse_json_payload_from_outputs(outputs: list[str]) -> dict[str, object] | None:
     payload: dict[str, object] | None = None
     for output in outputs:
         candidates: list[str] = [output]
@@ -892,15 +963,35 @@ def run_pod_local_agent(
                 continue
         if payload is not None:
             break
-    if payload is None:
-        raise SystemExit(
-            f"pod-local agent returned non-JSON output for instance {instance.instance_id}\n"
-            f"command: {command_for_display(command)}\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
-        )
-
     return payload
+
+
+def payload_text_fragments(payload: dict[str, object]) -> list[str]:
+    fragments: list[str] = []
+    payloads = payload.get("payloads")
+    if isinstance(payloads, list):
+        for entry in payloads:
+            if not isinstance(entry, dict):
+                continue
+            text = entry.get("text")
+            if isinstance(text, str) and text.strip():
+                fragments.append(text.strip())
+    if not fragments:
+        fragments.append(json.dumps(payload, ensure_ascii=False))
+    return fragments
+
+
+def is_rate_limited_text(text: str) -> bool:
+    normalized = text.lower()
+    return any(token in normalized for token in RATE_LIMIT_RETRY_TOKENS)
+
+
+def payload_is_rate_limited(payload: dict[str, object]) -> bool:
+    return any(is_rate_limited_text(fragment) for fragment in payload_text_fragments(payload))
+
+
+def rate_limit_retry_delay_seconds(retry_index: int) -> int:
+    return min(RATE_LIMIT_RETRY_BASE_DELAY_SECONDS * max(1, retry_index), RATE_LIMIT_RETRY_MAX_DELAY_SECONDS)
 
 
 def ensure_discussion_file(path: Path, label: str) -> None:
@@ -1407,20 +1498,138 @@ def run_mattermost_lounge_job_now(instance: ScaledInstance, timeout_ms: int = 18
 
 
 def run_mattermost_lounge_turn_now(instance: ScaledInstance, timeout_seconds: int = 180) -> str:
-    payload = run_pod_local_agent(
-        instance,
-        build_mattermost_lounge_turn_prompt(instance),
-        max(120, timeout_seconds),
-        agent_id=mattermost_lounge_agent_id(instance.instance_id),
-        session_id=f"mattermost-lounge-run-now-{instance.instance_id}-{int(time.time())}",
+    event_command = [
+        podman_bin(),
+        "exec",
+        instance.container_name,
+        "openclaw",
+        "system",
+        "event",
+        "--mode",
+        "now",
+        "--json",
+        "--text",
+        "manual heartbeat wake from openclaw-podman-starter",
+    ]
+    event_completed = subprocess.run(
+        event_command,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
-    text = latest_assistant_text(payload).strip()
-    if not text:
+    if event_completed.returncode != 0:
         raise SystemExit(
-            f"mattermost lounge run-now returned no text for instance {instance.instance_id}\n"
-            f"{json.dumps(payload, ensure_ascii=False, indent=2)}"
+            f"manual heartbeat wake failed for instance {instance.instance_id}\n"
+            f"command: {command_for_display(event_command)}\n"
+            f"stdout:\n{event_completed.stdout}\n"
+            f"stderr:\n{event_completed.stderr}"
         )
-    return text
+
+    last_command = [
+        podman_bin(),
+        "exec",
+        instance.container_name,
+        "openclaw",
+        "system",
+        "heartbeat",
+        "last",
+        "--json",
+        "--expect-final",
+        "--timeout",
+        str(max(30000, timeout_seconds * 1000)),
+    ]
+    completed = subprocess.run(
+        last_command,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"heartbeat last failed for instance {instance.instance_id}\n"
+            f"command: {command_for_display(last_command)}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+
+    try:
+        payload = json.loads(completed.stdout.strip() or completed.stderr.strip())
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            f"heartbeat last returned non-JSON output for instance {instance.instance_id}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise SystemExit(f"heartbeat last did not return a JSON object for instance {instance.instance_id}.")
+
+    status = str(payload.get("status", "unknown")).strip() or "unknown"
+    preview = str(payload.get("preview", "")).replace("\n", " ").strip()
+    if preview:
+        return f"{status}: {preview}"
+    reason = str(payload.get("reason", "")).strip()
+    if reason:
+        return f"{status}: {reason}"
+    return status
+
+
+def read_openclaw_config_payload(cfg: Config) -> dict[str, object]:
+    config_path = cfg.config_dir / "openclaw.json"
+    if not config_path.exists():
+        return {}
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def main_agent_heartbeat(instance: ScaledInstance) -> dict[str, object] | None:
+    payload = read_openclaw_config_payload(instance.config)
+    agents = payload.get("agents")
+    if not isinstance(agents, dict):
+        return None
+    entries = agents.get("list")
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("id") != "main":
+            continue
+        heartbeat = entry.get("heartbeat")
+        return heartbeat if isinstance(heartbeat, dict) else None
+    return None
+
+
+def set_mattermost_autonomy_env(env_file: Path, enabled: bool, interval_minutes: int | None = None) -> None:
+    write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_ENABLED", "true" if enabled else "false")
+    if interval_minutes is not None:
+        write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", f"{max(1, interval_minutes)}m")
+    write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_LIGHT_CONTEXT", "true")
+    write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_ISOLATED_SESSION", "true")
+
+
+def reconcile_mattermost_autonomy_instances(env_file: Path, instance_ids: list[int], remove_legacy_cron: bool = True) -> list[ScaledInstance]:
+    resolved_instances: list[ScaledInstance] = []
+    for instance_id in instance_ids:
+        instance = ensure_scaled_instance_state(scaled_instance(env_file, instance_id))
+        if container_running(instance.container_name):
+            if remove_legacy_cron:
+                remove_mattermost_lounge_job(instance)
+            play_command = build_kube_play_command(
+                instance.config,
+                pod_name=instance.pod_name,
+                instance_label=str(instance.instance_id),
+            )
+            exit_code = run_process(play_command, check=False)
+            if exit_code != 0:
+                raise SystemExit(f"Failed to reload instance {instance.instance_id} with updated heartbeat config.")
+        resolved_instances.append(instance)
+    return resolved_instances
 
 
 def latest_assistant_text(payload: dict[str, object]) -> str:
@@ -1525,6 +1734,23 @@ def truthy_env(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def resolved_model_ref(raw_env: dict[str, str]) -> str:
+    explicit = raw_env.get("OPENCLAW_MODEL_REF", "").strip()
+    if explicit:
+        return explicit
+    model_id = raw_env.get("OPENCLAW_OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL_ID).strip() or DEFAULT_OLLAMA_MODEL_ID
+    return f"ollama/{model_id}"
+
+
+def split_model_ref(model_ref: str) -> tuple[str, str]:
+    provider, separator, model_id = model_ref.partition("/")
+    provider = provider.strip()
+    model_id = model_id.strip()
+    if not provider or not separator or not model_id:
+        raise SystemExit(f"OPENCLAW_MODEL_REF must look like provider/model. Got: {model_ref!r}")
+    return provider, model_id
+
+
 def ensure_object(target: dict[str, object], key: str) -> dict[str, object]:
     value = target.get(key)
     if isinstance(value, dict):
@@ -1534,9 +1760,58 @@ def ensure_object(target: dict[str, object], key: str) -> dict[str, object]:
     return new_value
 
 
-def ollama_model_spec(model_id: str) -> dict[str, object]:
+def ensure_list(target: dict[str, object], key: str) -> list[object]:
+    value = target.get(key)
+    if isinstance(value, list):
+        return value
+    new_value: list[object] = []
+    target[key] = new_value
+    return new_value
+
+
+def ensure_agent_entry(agent_entries: list[object], agent_id: str) -> dict[str, object]:
+    for entry in agent_entries:
+        if isinstance(entry, dict) and entry.get("id") == agent_id:
+            return entry
+    new_entry: dict[str, object] = {"id": agent_id}
+    agent_entries.insert(0, new_entry)
+    return new_entry
+
+
+def scaled_instance_id_from_config(cfg: Config) -> int | None:
+    match = re.fullmatch(r"agent_(\d{3})", cfg.config_dir.name)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def mattermost_autonomy_enabled(cfg: Config, mattermost_enabled: bool) -> bool:
+    return (
+        mattermost_enabled
+        and truthy_env(cfg.raw_env.get("OPENCLAW_MATTERMOST_AUTONOMY_ENABLED"))
+        and scaled_instance_id_from_config(cfg) is not None
+    )
+
+
+def mattermost_autonomy_heartbeat(cfg: Config) -> dict[str, object]:
+    heartbeat: dict[str, object] = {
+        "every": cfg.raw_env.get("OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", "6m").strip() or "6m",
+        "lightContext": truthy_env(cfg.raw_env.get("OPENCLAW_MATTERMOST_AUTONOMY_LIGHT_CONTEXT")),
+        "isolatedSession": truthy_env(cfg.raw_env.get("OPENCLAW_MATTERMOST_AUTONOMY_ISOLATED_SESSION")),
+        "target": "none",
+        "prompt": DEFAULT_HEARTBEAT_PROMPT,
+    }
+    heartbeat_model = cfg.raw_env.get("OPENCLAW_MATTERMOST_AUTONOMY_MODEL", "").strip()
+    if not heartbeat_model:
+        heartbeat_model = model_ref_for(cfg)
+    if heartbeat_model:
+        heartbeat["model"] = heartbeat_model
+    return heartbeat
+
+
+def model_spec(model_id: str, *, provider_id: str = "") -> dict[str, object]:
     title = model_id.replace(":", " ").replace("-", " ").title()
-    return {
+    spec = {
         "id": model_id,
         "name": title,
         "reasoning": False,
@@ -1545,23 +1820,63 @@ def ollama_model_spec(model_id: str) -> dict[str, object]:
         "contextWindow": DEFAULT_CONTEXT_WINDOW,
         "maxTokens": DEFAULT_CONTEXT_WINDOW * 10,
     }
+    if provider_id == "zai":
+        spec["name"] = model_id.upper()
+        spec["reasoning"] = True
+        spec["contextWindow"] = 204800
+        spec["maxTokens"] = 131072
+    return spec
+
+
+def sync_managed_agent_model(agent_entry: dict[str, object], primary_model_ref: str) -> None:
+    agent_id = str(agent_entry.get("id", "")).strip()
+    if agent_id.startswith(("autochat-", "discuss-", "mattermost-lounge-", "persona-verify-")):
+        agent_entry["model"] = primary_model_ref
 
 
 def model_ref_for(cfg: Config) -> str:
-    return f"ollama/{cfg.ollama_model}"
+    return resolved_model_ref(cfg.raw_env)
+
+
+def active_model_provider(cfg: Config) -> str:
+    provider, _ = split_model_ref(model_ref_for(cfg))
+    return provider
+
+
+def active_model_base_url(cfg: Config) -> str:
+    provider = active_model_provider(cfg)
+    if provider == "ollama":
+        return cfg.ollama_base_url
+    if provider == "openrouter":
+        return cfg.raw_env.get("OPENCLAW_OPENROUTER_BASE_URL", "").strip() or DEFAULT_OPENROUTER_BASE_URL
+    if provider == "zai":
+        return cfg.raw_env.get("OPENCLAW_ZAI_BASE_URL", "").strip() or DEFAULT_ZAI_BASE_URL
+    return ""
+
+
+def model_api_key_check(cfg: Config) -> tuple[str | None, str]:
+    provider = active_model_provider(cfg)
+    if provider == "ollama":
+        return "OLLAMA_API_KEY", "set a placeholder like ollama-local"
+    if provider == "openrouter":
+        return "OPENROUTER_API_KEY", "required for OpenRouter"
+    if provider == "zai":
+        return "ZAI_API_KEY", "required for Z.AI"
+    return None, f"configure auth for provider '{provider}' if needed"
 
 
 def load_config_from_values(env_file: Path, raw_env: dict[str, str]) -> Config:
-    merged = {**DEFAULTS, **raw_env}
+    base_dir = env_file.parent
+    config_dir_hint = expand_path((raw_env.get("OPENCLAW_CONFIG_DIR") or DEFAULTS["OPENCLAW_CONFIG_DIR"]), base_dir)
+    state_env = parse_env_file(config_env_file(config_dir_hint))
+    merged = {**DEFAULTS, **raw_env, **state_env}
     container_name = (
         merged.get("OPENCLAW_PODMAN_CONTAINER")
         or merged.get("OPENCLAW_CONTAINER")
         or DEFAULTS["OPENCLAW_CONTAINER"]
     )
-    base_dir = env_file.parent
     config_dir = expand_path(merged["OPENCLAW_CONFIG_DIR"], base_dir)
     workspace_dir = expand_path(merged["OPENCLAW_WORKSPACE_DIR"], base_dir)
-    state_env = parse_env_file(config_env_file(config_dir))
     gateway_token = state_env.get("OPENCLAW_GATEWAY_TOKEN") or raw_env.get("OPENCLAW_GATEWAY_TOKEN", "")
     return Config(
         env_file=env_file,
@@ -1647,9 +1962,19 @@ def ensure_openclaw_config(cfg: Config) -> None:
     defaults = ensure_object(agents, "defaults")
     defaults["workspace"] = CONTAINER_WORKSPACE_DIR
     model = ensure_object(defaults, "model")
-    model["primary"] = model_ref_for(cfg)
+    primary_model_ref = model_ref_for(cfg)
+    provider_id, provider_model_id = split_model_ref(primary_model_ref)
+    model["primary"] = primary_model_ref
     sandbox = ensure_object(defaults, "sandbox")
     sandbox["mode"] = "off"
+    default_heartbeat = ensure_object(defaults, "heartbeat")
+    default_heartbeat["every"] = "0m"
+    default_heartbeat["target"] = "none"
+    default_heartbeat["prompt"] = DEFAULT_HEARTBEAT_PROMPT
+
+    agent_entries = ensure_list(agents, "list")
+    main_agent = ensure_agent_entry(agent_entries, "main")
+    defaults_models = ensure_object(defaults, "models")
 
     gateway = ensure_object(payload, "gateway")
     gateway["mode"] = "local"
@@ -1661,34 +1986,97 @@ def ensure_openclaw_config(cfg: Config) -> None:
                 origins.append(origin)
     control_ui["allowedOrigins"] = origins
 
+    auth = ensure_object(payload, "auth")
+    cooldowns = ensure_object(auth, "cooldowns")
+    try:
+        cooldowns["rateLimitedProfileRotations"] = max(
+            1, int(cfg.raw_env.get("OPENCLAW_AUTH_RATE_LIMITED_PROFILE_ROTATIONS", "10").strip() or "10")
+        )
+    except ValueError as exc:
+        raise SystemExit("OPENCLAW_AUTH_RATE_LIMITED_PROFILE_ROTATIONS must be an integer.") from exc
+
     models = ensure_object(payload, "models")
     providers = ensure_object(models, "providers")
-    ollama = ensure_object(providers, "ollama")
-    ollama["api"] = "ollama"
-    ollama["baseUrl"] = cfg.ollama_base_url
+    if provider_id == "ollama":
+        providers.pop("openrouter", None)
+        providers.pop("zai", None)
+        ollama = ensure_object(providers, "ollama")
+        ollama["api"] = "ollama"
+        ollama["baseUrl"] = cfg.ollama_base_url
 
-    existing_models = ollama.get("models")
-    preserved_models: list[dict[str, object]] = []
-    seen_model_ids: set[str] = {cfg.ollama_model}
-    if isinstance(existing_models, list):
-        for entry in existing_models:
-            if not isinstance(entry, dict):
-                continue
-            model_id = entry.get("id")
-            if isinstance(model_id, str) and model_id not in seen_model_ids:
-                seen_model_ids.add(model_id)
-                preserved_models.append(entry)
-    preserved_models.insert(0, ollama_model_spec(cfg.ollama_model))
-    ollama["models"] = preserved_models
+        existing_models = ollama.get("models")
+        preserved_models: list[dict[str, object]] = []
+        seen_model_ids: set[str] = {provider_model_id}
+        if isinstance(existing_models, list):
+            for entry in existing_models:
+                if not isinstance(entry, dict):
+                    continue
+                model_id = entry.get("id")
+                if isinstance(model_id, str) and model_id not in seen_model_ids:
+                    seen_model_ids.add(model_id)
+                    preserved_models.append(entry)
+        preserved_models.insert(0, model_spec(provider_model_id, provider_id=provider_id))
+        ollama["models"] = preserved_models
+    elif provider_id == "openrouter":
+        providers.pop("ollama", None)
+        providers.pop("zai", None)
+        openrouter = ensure_object(providers, "openrouter")
+        openrouter["api"] = "openai-completions"
+        openrouter["baseUrl"] = cfg.raw_env.get("OPENCLAW_OPENROUTER_BASE_URL", "").strip() or DEFAULT_OPENROUTER_BASE_URL
+        openrouter["apiKey"] = "${OPENROUTER_API_KEY}"
+
+        existing_models = openrouter.get("models")
+        preserved_models = []
+        seen_model_ids = {provider_model_id}
+        if isinstance(existing_models, list):
+            for entry in existing_models:
+                if not isinstance(entry, dict):
+                    continue
+                model_id = entry.get("id")
+                if isinstance(model_id, str) and model_id not in seen_model_ids:
+                    seen_model_ids.add(model_id)
+                    preserved_models.append(entry)
+        preserved_models.insert(0, model_spec(provider_model_id, provider_id=provider_id))
+        openrouter["models"] = preserved_models
+    elif provider_id == "zai":
+        providers.pop("ollama", None)
+        providers.pop("openrouter", None)
+        providers.pop("zai", None)
+        model.pop("fallbacks", None)
+        for model_key in list(defaults_models.keys()):
+            if model_key.startswith("zai/"):
+                defaults_models.pop(model_key, None)
 
     mattermost_token = cfg.raw_env.get("OPENCLAW_MATTERMOST_BOT_TOKEN", "").strip()
     mattermost_base_url = cfg.raw_env.get("OPENCLAW_MATTERMOST_BASE_URL", "").strip()
     mattermost_enabled = truthy_env(cfg.raw_env.get("OPENCLAW_MATTERMOST_ENABLED")) or bool(mattermost_token)
+    if mattermost_autonomy_enabled(cfg, mattermost_enabled):
+        heartbeat_config = mattermost_autonomy_heartbeat(cfg)
+        main_agent["heartbeat"] = heartbeat_config
+        for key in ("model", "lightContext", "isolatedSession"):
+            if key in heartbeat_config:
+                default_heartbeat[key] = heartbeat_config[key]
+    elif isinstance(main_agent, dict):
+        main_agent.pop("heartbeat", None)
+        for key in ("model", "lightContext", "isolatedSession"):
+            default_heartbeat.pop(key, None)
+    for entry in agent_entries:
+        if isinstance(entry, dict) and entry.get("id") != "main":
+            entry.pop("heartbeat", None)
+            sync_managed_agent_model(entry, primary_model_ref)
+    if not defaults_models:
+        defaults.pop("models", None)
+    if not providers:
+        models.pop("providers", None)
+    if not models:
+        payload.pop("models", None)
+    payload.pop("meta", None)
+
     if mattermost_enabled and mattermost_token and mattermost_base_url:
         channels = ensure_object(payload, "channels")
         mattermost = ensure_object(channels, "mattermost")
         mattermost["enabled"] = True
-        mattermost["botToken"] = mattermost_token
+        mattermost["botToken"] = "${OPENCLAW_MATTERMOST_BOT_TOKEN}"
         mattermost["baseUrl"] = mattermost_base_url
 
         for env_key, config_key in (
@@ -1719,8 +2107,14 @@ def ensure_openclaw_config(cfg: Config) -> None:
 
     plugins = ensure_object(payload, "plugins")
     entries = ensure_object(plugins, "entries")
-    ollama_entry = ensure_object(entries, "ollama")
-    ollama_entry["enabled"] = True
+    active_provider_entry = ensure_object(entries, provider_id)
+    active_provider_entry["enabled"] = True
+    for provider_name in ("ollama", "openrouter", "zai"):
+        if provider_name == provider_id:
+            continue
+        entry = entries.get(provider_name)
+        if isinstance(entry, dict):
+            entry["enabled"] = False
     if mattermost_enabled and mattermost_token and mattermost_base_url:
         mattermost_entry = ensure_object(entries, "mattermost")
         mattermost_entry["enabled"] = True
@@ -1737,12 +2131,14 @@ def ensure_state(cfg: Config) -> Config:
         token = secrets.token_urlsafe(24)
 
     write_or_update_env_value(config_env_file(cfg.config_dir), "OPENCLAW_GATEWAY_TOKEN", token)
+    for key, value in secret_env_values(cfg.raw_env).items():
+        write_or_update_env_value(config_env_file(cfg.config_dir), key, value)
     remove_env_value(cfg.env_file, "OPENCLAW_GATEWAY_TOKEN")
 
     ensure_openclaw_config(cfg)
     ensure_kube_manifest(cfg, instance_label="single")
 
-    return load_config(cfg.env_file)
+    return load_config_from_values(cfg.env_file, public_env_values(cfg.raw_env))
 
 
 def command_exists(name: str) -> bool:
@@ -1815,10 +2211,8 @@ def runtime_env_pairs(cfg: Config) -> list[tuple[str, str]]:
     for key, value in cfg.raw_env.items():
         if not value:
             continue
-        if key in RUNTIME_ENV_EXACT or key.endswith(RUNTIME_ENV_SUFFIXES):
+        if key in RUNTIME_ENV_EXACT:
             pairs.append((key, value))
-    if cfg.gateway_token:
-        pairs.append(("OPENCLAW_GATEWAY_TOKEN", cfg.gateway_token))
     return sorted(pairs)
 
 
@@ -1894,6 +2288,30 @@ def write_generated_env_file(path: Path, raw_env: dict[str, str], header: str) -
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def is_secret_env_key(key: str) -> bool:
+    return key in SECRET_ENV_EXACT or key.endswith(SECRET_ENV_SUFFIXES)
+
+
+def secret_env_values(raw_env: dict[str, str]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for key, value in raw_env.items():
+        if value and is_secret_env_key(key):
+            values[key] = value
+    return values
+
+
+def public_env_values(raw_env: dict[str, str]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for key, value in raw_env.items():
+        if not value:
+            values[key] = value
+            continue
+        if is_secret_env_key(key):
+            continue
+        values[key] = value
+    return values
+
+
 def scaled_instance(env_file: Path, instance_id: int) -> ScaledInstance:
     base_env = parse_env_file(env_file)
     merged = {**DEFAULTS, **base_env}
@@ -1926,12 +2344,12 @@ def scaled_instance(env_file: Path, instance_id: int) -> ScaledInstance:
 
 
 def ensure_scaled_instance_state(instance: ScaledInstance) -> ScaledInstance:
+    cfg = ensure_state(instance.config)
     write_generated_env_file(
         instance.config.env_file,
-        instance.config.raw_env,
+        public_env_values(instance.config.raw_env),
         f"# Generated for scaled instance {instance.instance_id}.",
     )
-    cfg = ensure_state(load_config(instance.config.env_file))
     ensure_kube_manifest(cfg, pod_name=instance.pod_name, instance_label=str(instance.instance_id))
     resolved = ScaledInstance(
         instance_id=instance.instance_id,
@@ -2995,19 +3413,15 @@ def cmd_mattermost_lounge_enable(args: argparse.Namespace) -> int:
     if not container_running(mm_cfg.container_name):
         raise SystemExit("Mattermost container is not running. Launch it first.")
 
-    mattermost_lounge_root(args.env_file).mkdir(parents=True, exist_ok=True)
-    for instance_id in instance_ids:
-        instance = ensure_scaled_instance_state(scaled_instance(args.env_file, instance_id))
-        ensure_scaled_instance_running(instance)
-        ensure_mattermost_lounge_agent(instance)
-        job = add_mattermost_lounge_job(instance, interval_minutes=args.interval_minutes, timeout_seconds=args.timeout)
-        print(f"[ok] enabled Mattermost lounge for instance {instance_id}")
-        print_kv("job id", str(job.get("id")))
-        print_kv("job name", str(job.get("name")))
-        schedule = job.get("schedule") if isinstance(job, dict) else {}
-        if isinstance(schedule, dict):
-            print_kv("schedule", json.dumps(schedule, ensure_ascii=False))
-    print_kv("state file", str(mattermost_lounge_state_path(args.env_file)))
+    set_mattermost_autonomy_env(args.env_file, enabled=True, interval_minutes=args.interval_minutes)
+    instances = reconcile_mattermost_autonomy_instances(args.env_file, instance_ids, remove_legacy_cron=True)
+    print("[ok] enabled Mattermost autonomy via heartbeat")
+    print_kv("interval", f"{max(1, args.interval_minutes)}m")
+    for instance in instances:
+        heartbeat = main_agent_heartbeat(instance)
+        print(f"[ok] instance {instance.instance_id} heartbeat ready")
+        print_kv("config", str(instance.config.config_dir / "openclaw.json"))
+        print_kv("heartbeat", json.dumps(heartbeat or {}, ensure_ascii=False))
     return 0
 
 
@@ -3019,34 +3433,26 @@ def cmd_mattermost_lounge_status(args: argparse.Namespace) -> int:
     ensure_env_file(args.env_file)
     mm_cfg = load_mattermost_config(args.env_file)
     overall = 0
+    env_values = parse_env_file(args.env_file)
+    enabled = truthy_env(env_values.get("OPENCLAW_MATTERMOST_AUTONOMY_ENABLED"))
+    print_kv("heartbeat autonomy enabled", "true" if enabled else "false")
+    print_kv("heartbeat interval", env_values.get("OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", "6m"))
     for instance_id in instance_ids:
-        instance = scaled_instance(args.env_file, instance_id)
+        instance = ensure_scaled_instance_state(scaled_instance(args.env_file, instance_id))
         running = container_running(instance.container_name)
         marker = "[ok]" if running else "[warn]"
         print(f"{marker} instance {instance_id}: pod={instance.pod_name} container={instance.container_name} running={running}")
-        if not running:
+        heartbeat = main_agent_heartbeat(instance)
+        if heartbeat is None:
+            print("  heartbeat: disabled")
             overall = 1
-            continue
-        job = mattermost_lounge_job(instance)
-        if job is None:
-            print("  mattermost lounge: missing")
-            overall = 1
-            continue
-        print(f"  mattermost lounge: {job.get('name')} enabled={job.get('enabled')}")
-        state = job.get("state")
-        if isinstance(state, dict):
-            if state.get("runningAtMs"):
-                print("  state: running")
-                print(f"  runningAt: {format_epoch_ms(state.get('runningAtMs'))}")
-            else:
-                print("  state: idle")
-            print(f"  lastRunStatus: {state.get('lastRunStatus')}")
-            print(f"  lastRunAt: {format_epoch_ms(state.get('lastRunAtMs'))}")
-            print(f"  nextRunAt: {format_epoch_ms(state.get('nextRunAtMs'))}")
-            print(f"  nextRunAtMs: {state.get('nextRunAtMs')}")
-        schedule = job.get("schedule")
-        if isinstance(schedule, dict):
-            print(f"  schedule: {json.dumps(schedule, ensure_ascii=False)}")
+        else:
+            print(f"  heartbeat: {json.dumps(heartbeat, ensure_ascii=False)}")
+        if running:
+            legacy_job = mattermost_lounge_job(instance)
+            if legacy_job is not None:
+                print(f"  legacy lounge cron still present: {legacy_job.get('name')}")
+                overall = 1
 
     print_kv("channel url", mattermost_channel_url(mm_cfg))
     try:
@@ -3079,11 +3485,21 @@ def cmd_mattermost_lounge_run_now(args: argparse.Namespace) -> int:
         raise SystemExit("mattermost lounge currently supports exactly 3 instances.")
 
     ensure_env_file(args.env_file)
+    if not truthy_env(parse_env_file(args.env_file).get("OPENCLAW_MATTERMOST_AUTONOMY_ENABLED")):
+        raise SystemExit("Mattermost heartbeat autonomy is disabled. Run `mattermost lounge enable` first.")
     for instance_id in instance_ids:
         instance = ensure_scaled_instance_state(scaled_instance(args.env_file, instance_id))
-        ensure_scaled_instance_running(instance)
+        if not container_running(instance.container_name):
+            play_command = build_kube_play_command(
+                instance.config,
+                pod_name=instance.pod_name,
+                instance_label=str(instance.instance_id),
+            )
+            exit_code = run_process(play_command, check=False)
+            if exit_code != 0:
+                raise SystemExit(f"Failed to start instance {instance.instance_id} for manual heartbeat wake.")
         output = run_mattermost_lounge_turn_now(instance, timeout_seconds=max(30, args.timeout_ms // 1000))
-        print(f"[ok] Mattermost lounge turn instance {instance_id}: {output}")
+        print(f"[ok] Mattermost heartbeat wake instance {instance_id}: {console_safe(output)}")
 
     if args.wait_seconds > 0:
         time.sleep(args.wait_seconds)
@@ -3098,20 +3514,27 @@ def cmd_mattermost_lounge_disable(args: argparse.Namespace) -> int:
         raise SystemExit("mattermost lounge currently supports exactly 3 instances.")
 
     ensure_env_file(args.env_file)
-    removed_any = False
-    for instance_id in instance_ids:
-        instance = scaled_instance(args.env_file, instance_id)
-        if not container_running(instance.container_name):
-            print(f"[warn] instance {instance_id} is not running; skipping Mattermost lounge cron removal")
-            continue
-        removed = remove_mattermost_lounge_job(instance)
-        removed_any = removed_any or removed
-        print(f"[ok] Mattermost lounge remove instance {instance_id}: removed={removed}")
-    return 0 if removed_any else 1
+    set_mattermost_autonomy_env(args.env_file, enabled=False)
+    instances = reconcile_mattermost_autonomy_instances(args.env_file, instance_ids, remove_legacy_cron=True)
+    print("[ok] disabled Mattermost heartbeat autonomy")
+    for instance in instances:
+        print(f"[ok] instance {instance.instance_id} heartbeat disabled")
+    return 0
 
 
 def print_kv(title: str, value: str) -> None:
-    print(f"{title}: {value}")
+    print(f"{title}: {console_safe(value)}")
+
+
+def console_safe(value: str) -> str:
+    encoding = sys.stdout.encoding or "utf-8"
+    return value.encode(encoding, errors="replace").decode(encoding, errors="replace")
+
+
+def print_model_runtime(cfg: Config) -> None:
+    print_kv("model provider", active_model_provider(cfg))
+    print_kv("model base url", active_model_base_url(cfg) or "-")
+    print_kv("default model", model_ref_for(cfg))
 
 
 def format_epoch_ms(value: object) -> str:
@@ -3141,9 +3564,8 @@ def cmd_init(args: argparse.Namespace) -> int:
     print_kv("workspace dir", str(cfg.workspace_dir))
     print_kv("container", cfg.container_name)
     print_kv("image", cfg.image)
-    print_kv("ollama base url", cfg.ollama_base_url)
     print_kv("network", cfg.network)
-    print_kv("default model", model_ref_for(cfg))
+    print_model_runtime(cfg)
     print_kv("tools profile", "full")
     print_kv("sandbox mode", "off")
     return 0
@@ -3161,7 +3583,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     checks.append(("uv", command_exists("uv"), "required to run the helper"))
     checks.append(("podman", podman_available(), "required to launch the container"))
     checks.append(("openclaw", command_exists("openclaw"), "recommended for host-side control plane"))
-    checks.append(("OLLAMA_API_KEY", bool(cfg.raw_env.get("OLLAMA_API_KEY", "").strip()), "set a placeholder like ollama-local"))
+    model_api_key_name, model_api_key_hint = model_api_key_check(cfg)
+    if model_api_key_name:
+        checks.append((model_api_key_name, bool(cfg.raw_env.get(model_api_key_name, "").strip()), model_api_key_hint))
     checks.append((".env", env_exists, str(args.env_file)))
     checks.append(("config dir", cfg.config_dir.exists(), str(cfg.config_dir)))
     checks.append(("workspace dir", cfg.workspace_dir.exists(), str(cfg.workspace_dir)))
@@ -3183,9 +3607,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print_kv("gateway port", str(cfg.gateway_port))
     print_kv("bridge port", str(cfg.bridge_port))
     print_kv("image", cfg.image)
-    print_kv("ollama base url", cfg.ollama_base_url)
     print_kv("network", cfg.network)
-    print_kv("default model", model_ref_for(cfg))
+    print_model_runtime(cfg)
     print_kv("tools profile", "full")
     print_kv("sandbox mode", "off")
     return exit_code
@@ -3365,9 +3788,8 @@ def cmd_print_env(args: argparse.Namespace) -> int:
         print_kv("config dir", str(cfg.config_dir))
         print_kv("workspace dir", str(cfg.workspace_dir))
         print_kv("mattermost tools dir", str(mattermost_tools_root(instance)))
-        print_kv("ollama base url", cfg.ollama_base_url)
         print_kv("network", cfg.network)
-        print_kv("default model", model_ref_for(cfg))
+        print_model_runtime(cfg)
         print_kv("tools profile", "full")
         print_kv("sandbox mode", "off")
         return 0
@@ -3385,9 +3807,8 @@ def cmd_print_env(args: argparse.Namespace) -> int:
     print_kv("state env", str(config_env_file(cfg.config_dir)))
     print_kv("manifest", str(manifest_path_for_config(cfg)))
     print_kv("workspace dir", str(cfg.workspace_dir))
-    print_kv("ollama base url", cfg.ollama_base_url)
     print_kv("network", cfg.network)
-    print_kv("default model", model_ref_for(cfg))
+    print_model_runtime(cfg)
     print_kv("tools profile", "full")
     print_kv("sandbox mode", "off")
     print_kv("token present", "yes" if bool(cfg.gateway_token.strip()) else "no")
@@ -3694,26 +4115,26 @@ def build_parser() -> argparse.ArgumentParser:
     mattermost_smoke_parser.add_argument("--timeout", type=int, default=120, help="Wait this many seconds for replies (default: 120).")
     mattermost_smoke_parser.set_defaults(func=cmd_mattermost_smoke)
 
-    mattermost_lounge_parser = mattermost_subparsers.add_parser("lounge", help="Manage autonomous lounge posting in the triad Mattermost channel.")
+    mattermost_lounge_parser = mattermost_subparsers.add_parser("lounge", help="Manage heartbeat-driven autonomous triad chatter in Mattermost.")
     mattermost_lounge_subparsers = mattermost_lounge_parser.add_subparsers(dest="mattermost_lounge_command", required=True)
 
-    mattermost_lounge_enable_parser = mattermost_lounge_subparsers.add_parser("enable", help="Create or replace pod-local cron jobs for the Mattermost lounge.")
+    mattermost_lounge_enable_parser = mattermost_lounge_subparsers.add_parser("enable", help="Enable heartbeat-driven autonomous chatter for the triad agents.")
     mattermost_lounge_enable_parser.add_argument("--count", type=int, help="Scaled instance count to manage (must be 3; default: 3).")
-    mattermost_lounge_enable_parser.add_argument("--interval-minutes", type=int, default=2, help="Minute gap between speakers; full cycle is gap*3 (default: 2).")
-    mattermost_lounge_enable_parser.add_argument("--timeout", type=int, default=300, help="Per-turn timeout seconds (default: 300).")
+    mattermost_lounge_enable_parser.add_argument("--interval-minutes", type=int, default=6, help="Heartbeat interval per agent in minutes (default: 6).")
+    mattermost_lounge_enable_parser.add_argument("--timeout", type=int, default=300, help="Compatibility placeholder; config is applied immediately and pods are reloaded (default: 300).")
     mattermost_lounge_enable_parser.set_defaults(func=cmd_mattermost_lounge_enable)
 
-    mattermost_lounge_status_parser = mattermost_lounge_subparsers.add_parser("status", help="Show pod-local Mattermost lounge cron status.")
+    mattermost_lounge_status_parser = mattermost_lounge_subparsers.add_parser("status", help="Show Mattermost heartbeat autonomy status.")
     mattermost_lounge_status_parser.add_argument("--count", type=int, help="Scaled instance count to inspect (must be 3; default: 3).")
     mattermost_lounge_status_parser.set_defaults(func=cmd_mattermost_lounge_status)
 
-    mattermost_lounge_run_now_parser = mattermost_lounge_subparsers.add_parser("run-now", help="Enqueue one immediate Mattermost lounge turn for each pod-local job.")
+    mattermost_lounge_run_now_parser = mattermost_lounge_subparsers.add_parser("run-now", help="Trigger one immediate heartbeat wake for each triad agent.")
     mattermost_lounge_run_now_parser.add_argument("--count", type=int, help="Scaled instance count to trigger (must be 3; default: 3).")
     mattermost_lounge_run_now_parser.add_argument("--timeout-ms", type=int, default=300000, help="Per-turn timeout in ms for direct run-now execution (default: 300000).")
     mattermost_lounge_run_now_parser.add_argument("--wait-seconds", type=int, default=10, help="Wait this many seconds before printing the thread info (default: 10).")
     mattermost_lounge_run_now_parser.set_defaults(func=cmd_mattermost_lounge_run_now)
 
-    mattermost_lounge_disable_parser = mattermost_lounge_subparsers.add_parser("disable", help="Remove pod-local Mattermost lounge cron jobs.")
+    mattermost_lounge_disable_parser = mattermost_lounge_subparsers.add_parser("disable", help="Disable heartbeat-driven autonomous chatter and remove legacy lounge cron jobs.")
     mattermost_lounge_disable_parser.add_argument("--count", type=int, help="Scaled instance count to disable (must be 3; default: 3).")
     mattermost_lounge_disable_parser.set_defaults(func=cmd_mattermost_lounge_disable)
 
