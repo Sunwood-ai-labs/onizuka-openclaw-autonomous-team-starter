@@ -51,30 +51,8 @@
       #${HERO_ID} .rokuseki-hero-crest {
         width: 168px;
         height: 168px;
-        margin-bottom: 18px;
+        margin-bottom: 10px;
         filter: drop-shadow(0 16px 26px rgba(14, 28, 58, 0.18));
-      }
-
-      #${HERO_ID} .rokuseki-hero-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #18325e, #578fce);
-        color: #f8fbff;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        box-shadow: 0 10px 24px rgba(19, 34, 70, 0.16);
-      }
-
-      #${HERO_ID} .rokuseki-hero-copy {
-        margin-top: 12px;
-        max-width: 540px;
-        color: rgba(var(--center-channel-color-rgb), 0.8);
-        line-height: 1.55;
-        font-size: 14px;
       }
 
       #${HEADER_CREST_ID} {
@@ -110,10 +88,6 @@
   function heroMarkup() {
     return `
       <div class="rokuseki-hero-crest">${createCrestSvg()}</div>
-      <div class="rokuseki-hero-badge">CHANNEL CREST ・ \u308d\u304f\u305b\u304d\u8ac7\u8a71\u5ba4</div>
-      <div class="rokuseki-hero-copy">
-        Mattermost \u6a19\u6e96\u306e\u30c1\u30e3\u30f3\u30cd\u30eb\u5c0e\u5165\u30a4\u30e9\u30b9\u30c8\u306e\u4ee3\u308f\u308a\u306b\u3001\u516d\u5e2d\u30c1\u30fc\u30e0\u5c02\u7528\u306e\u30af\u30ec\u30b9\u30c8\u3092\u8868\u793a\u3057\u307e\u3059\u3002
-      </div>
     `;
   }
 
