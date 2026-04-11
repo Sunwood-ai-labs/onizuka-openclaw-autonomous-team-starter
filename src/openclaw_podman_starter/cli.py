@@ -172,13 +172,13 @@ DEFAULTS = {
     "OPENCLAW_MATTERMOST_TEAMMATE_NAME_DISPLAY": "full_name",
 }
 
-MATTERMOST_AUTONOMY_INTERVAL_OFFSETS = {
-    1: 1,
-    2: -2,
-    3: 4,
-    4: 2,
-    5: -1,
-    6: 6,
+MATTERMOST_AUTONOMY_INTERVAL_DEFAULTS = {
+    1: "20m",
+    2: "10m",
+    3: "45m",
+    4: "30m",
+    5: "15m",
+    6: "60m",
 }
 
 RUNTIME_ENV_EXACT = {
@@ -2038,14 +2038,13 @@ def normalize_minute_interval(value: str, fallback: str = "6m") -> str:
 
 
 def default_mattermost_autonomy_interval_for_instance(base_interval_minutes: int, instance_id: int) -> str:
-    offset = MATTERMOST_AUTONOMY_INTERVAL_OFFSETS.get(instance_id, 0)
-    return f"{max(1, base_interval_minutes + offset)}m"
+    return MATTERMOST_AUTONOMY_INTERVAL_DEFAULTS.get(instance_id, f"{max(10, base_interval_minutes)}m")
 
 
 def seed_mattermost_autonomy_interval_overrides(env_file: Path, base_interval_minutes: int) -> dict[int, str]:
     env_values = parse_env_file(env_file)
     seeded: dict[int, str] = {}
-    for instance_id in sorted(MATTERMOST_AUTONOMY_INTERVAL_OFFSETS):
+    for instance_id in sorted(MATTERMOST_AUTONOMY_INTERVAL_DEFAULTS):
         key = instance_override_env_key("OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", instance_id)
         current = env_values.get(key, "").strip()
         if current:

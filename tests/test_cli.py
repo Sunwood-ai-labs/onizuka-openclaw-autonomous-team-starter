@@ -222,12 +222,12 @@ class CliTests(unittest.TestCase):
             values = cli.parse_env_file(env_file)
 
             self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL"], "6m")
-            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_001"], "7m")
-            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_002"], "4m")
-            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_003"], "10m")
-            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_004"], "8m")
-            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_005"], "5m")
-            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_006"], "12m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_001"], "20m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_002"], "10m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_003"], "45m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_004"], "30m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_005"], "15m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_006"], "60m")
 
     def test_scaled_instance_applies_autonomy_interval_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
