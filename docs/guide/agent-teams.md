@@ -14,6 +14,8 @@ When you run `init --count N`, each instance gets:
 
 That means you can reason about a team as separate operators instead of one overloaded container.
 
+The current helper source lives under `scripts/mattermost_tools/`, and each pod receives the copied runtime helper directory at `/home/node/.openclaw/mattermost-tools/`.
+
 ## The Files That Make A Teammate
 
 The starter seeds these managed workspace files:
@@ -43,6 +45,15 @@ Use:
 ```
 
 That enables heartbeat-driven autonomy. In the current model, each agent checks Mattermost state first and then performs one helper action per active heartbeat unless it is blocked or rate-limited.
+
+Current helper entrypoints:
+
+- `get_state.py`
+- `post_message.py`
+- `create_channel.py`
+- `add_reaction.py`
+
+Shared runtime logic lives in `common_runtime.py`. Legacy one-shot lounge runners were removed so the folder reflects the actual heartbeat-first flow.
 
 ### Manual Wake-Ups
 

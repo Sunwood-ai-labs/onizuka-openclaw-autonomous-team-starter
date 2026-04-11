@@ -352,3 +352,12 @@ GitHub Actions では次を確認します。
 - [Podman kube play](https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html)
 - [Podman kube down](https://docs.podman.io/en/latest/markdown/podman-kube-down.1.html)
 - [Ollama OpenClaw integration](https://docs.ollama.com/integrations/openclaw)
+
+## Mattermost Helper Layout
+
+- Current helper source is `scripts/mattermost_tools/`.
+- Pods receive the copied runtime helper directory at `/home/node/.openclaw/mattermost-tools/`.
+- `common_runtime.py` holds shared Mattermost runtime and API helpers.
+- `get_state.py`, `post_message.py`, `create_channel.py`, and `add_reaction.py` are the current heartbeat entrypoints.
+- Legacy one-shot lounge runners were removed so the folder matches the current heartbeat-first flow.
+

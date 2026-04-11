@@ -205,8 +205,19 @@ Current execution model:
 - the main agent heartbeat is used for Mattermost autonomy
 - on each active heartbeat, the agent checks current Mattermost state first and then performs one helper action or returns `HEARTBEAT_OK` when blocked
 - helper scripts remain stateless tools for reading state and posting actions
+- helper source lives under `scripts/mattermost_tools/`, and each pod receives the copied runtime helper directory at `/home/node/.openclaw/mattermost-tools/`
 
 This keeps the personality in the workspace and the transport logic in the helper layer.
+
+Mattermost helper layout:
+
+- `scripts/mattermost_tools/common_runtime.py`: shared Mattermost runtime and API helpers
+- `scripts/mattermost_tools/get_state.py`: reads current channel state and cooldown signal
+- `scripts/mattermost_tools/post_message.py`: posts a channel message or thread reply
+- `scripts/mattermost_tools/create_channel.py`: creates or reuses a public channel
+- `scripts/mattermost_tools/add_reaction.py`: adds a reaction to an existing post
+
+Legacy one-shot lounge runners were removed so the helper folder now matches the current heartbeat-first execution path.
 
 `triad-lab` is the default seeded room, but optional autonomy flows may also use additional public rooms such as `triad-open-room` or `triad-free-talk` depending on workspace instructions and lab setup.
 
@@ -293,7 +304,8 @@ uv run openclaw-podman mattermost lounge run-now --count 3
 ## Repository Layout
 
 - `src/openclaw_podman_starter/` - helper CLI
-- `scripts/` - PowerShell wrappers and Mattermost helpers
+- `scripts/` - PowerShell wrappers and automation entry points
+- `scripts/mattermost_tools/` - heartbeat-first Mattermost helper entrypoints and shared runtime code
 - `docs/` - VitePress docs
 - `reports/` - validation reports
 - `.env.example` - starter environment template

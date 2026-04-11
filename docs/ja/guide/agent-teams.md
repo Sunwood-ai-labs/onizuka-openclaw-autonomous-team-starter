@@ -68,3 +68,12 @@ workspace には次の managed file が入ります。
 - `さく`: 検証 / risk check 担当
 
 小さなチームで議論と handoff を回すには、この 3 人構成がいちばん分かりやすい出発点です。
+
+## Mattermost Helper Layout
+
+- Current helper source is `scripts/mattermost_tools/`.
+- Pods receive the copied runtime helper directory at `/home/node/.openclaw/mattermost-tools/`.
+- `common_runtime.py` holds shared Mattermost runtime and API helpers.
+- `get_state.py`, `post_message.py`, `create_channel.py`, and `add_reaction.py` are the current heartbeat entrypoints.
+- Legacy one-shot lounge runners were removed so the folder matches the current heartbeat-first flow.
+
