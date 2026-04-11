@@ -3,6 +3,8 @@
   const TEAM_SLUG = "openclaw";
   const CHANNEL_SLUG = "triad-lab";
   const PANEL_ID = "rokuseki-channel-brand-panel";
+  const HERO_ID = "rokuseki-channel-brand-hero";
+  const HEADER_CREST_ID = "rokuseki-channel-header-crest";
   const STYLE_ID = "rokuseki-channel-brand-style";
   const BUTTON_TITLE = "六席印";
 
@@ -135,6 +137,69 @@
         color: rgba(210, 235, 255, 0.92);
       }
 
+      #${HERO_ID} {
+        margin: 0 auto 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      #${HERO_ID} .rokuseki-hero-crest {
+        width: 168px;
+        height: 168px;
+        margin-bottom: 18px;
+        filter: drop-shadow(0 16px 26px rgba(14, 28, 58, 0.18));
+      }
+
+      #${HERO_ID} .rokuseki-hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #18325e, #578fce);
+        color: #f8fbff;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        box-shadow: 0 10px 24px rgba(19, 34, 70, 0.16);
+      }
+
+      #${HERO_ID} .rokuseki-hero-copy {
+        margin-top: 12px;
+        max-width: 540px;
+        color: rgba(var(--center-channel-color-rgb), 0.8);
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      #${HEADER_CREST_ID} {
+        display: inline-flex;
+        width: 32px;
+        height: 32px;
+        margin-right: 10px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 8px 18px rgba(18, 32, 62, 0.18);
+        flex: 0 0 32px;
+      }
+
+      #channel-header .channel-header__top {
+        display: flex;
+        align-items: center;
+      }
+
+      #channelIntro.rokuseki-intro-patched > svg:first-of-type {
+        display: none !important;
+      }
+
+      #channelIntro.rokuseki-intro-patched .channel-intro__title {
+        margin-top: 4px;
+      }
+
       @media (max-width: 1200px) {
         #${PANEL_ID} {
           width: 296px;
@@ -191,8 +256,71 @@
     document.body.appendChild(panel);
   }
 
+  function heroMarkup() {
+    return `
+      <div class="rokuseki-hero-crest">${createCrestSvg()}</div>
+      <div class="rokuseki-hero-badge">CHANNEL CREST ・ ろくせき談話室</div>
+      <div class="rokuseki-hero-copy">
+        Mattermost 標準のチャンネル導入イラストの代わりに、六席チーム専用のクレストを表示します。
+      </div>
+    `;
+  }
+
+  function ensureIntroHero() {
+    const intro = document.getElementById("channelIntro");
+    if (!intro) {
+      return;
+    }
+
+    intro.classList.add("rokuseki-intro-patched");
+
+    let hero = document.getElementById(HERO_ID);
+    if (hero) {
+      return;
+    }
+
+    const title = intro.querySelector(".channel-intro__title");
+    if (!title) {
+      return;
+    }
+
+    hero = document.createElement("div");
+    hero.id = HERO_ID;
+    hero.innerHTML = heroMarkup();
+    intro.insertBefore(hero, title);
+  }
+
+  function ensureHeaderCrest() {
+    const top = document.querySelector("#channel-header .channel-header__top");
+    if (!top) {
+      return;
+    }
+
+    if (document.getElementById(HEADER_CREST_ID)) {
+      return;
+    }
+
+    const crest = document.createElement("span");
+    crest.id = HEADER_CREST_ID;
+    crest.setAttribute("aria-label", "ろくせき談話室 crest");
+    crest.innerHTML = createCrestSvg();
+    top.insertBefore(crest, top.firstChild);
+  }
+
   function removePanel() {
     document.getElementById(PANEL_ID)?.remove();
+  }
+
+  function removeIntroHero() {
+    document.getElementById(HERO_ID)?.remove();
+    const intro = document.getElementById("channelIntro");
+    if (intro) {
+      intro.classList.remove("rokuseki-intro-patched");
+    }
+  }
+
+  function removeHeaderCrest() {
+    document.getElementById(HEADER_CREST_ID)?.remove();
   }
 
   function isTargetChannel() {
@@ -209,10 +337,14 @@
     if (isTargetChannel()) {
       ensureStyle();
       ensurePanel();
+      ensureIntroHero();
+      ensureHeaderCrest();
       return;
     }
 
     removePanel();
+    removeIntroHero();
+    removeHeaderCrest();
   }
 
   class RokusekiBrandPlugin {
@@ -275,6 +407,8 @@
         this.observer.disconnect();
       }
       removePanel();
+      removeIntroHero();
+      removeHeaderCrest();
       window.removeEventListener("hashchange", syncPanel);
       window.removeEventListener("popstate", syncPanel);
     }
