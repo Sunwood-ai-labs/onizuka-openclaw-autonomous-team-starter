@@ -19,6 +19,7 @@ These env vars control the communication lab:
 - `OPENCLAW_MATTERMOST_CHANNEL_NAME`
 - `OPENCLAW_MATTERMOST_AUTONOMY_ENABLED`
 - `OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL`
+- `OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_00N`
 - `OPENCLAW_MATTERMOST_AUTONOMY_MODEL`
 
 Most team behavior still lives in the workspace scaffolds rather than env vars. Use `.env` for infrastructure defaults, then tune `SOUL.md`, `IDENTITY.md`, `USER.md`, and `HEARTBEAT.md` inside each generated workspace.

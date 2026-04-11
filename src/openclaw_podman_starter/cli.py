@@ -172,6 +172,15 @@ DEFAULTS = {
     "OPENCLAW_MATTERMOST_TEAMMATE_NAME_DISPLAY": "full_name",
 }
 
+MATTERMOST_AUTONOMY_INTERVAL_OFFSETS = {
+    1: 1,
+    2: -2,
+    3: 4,
+    4: 2,
+    5: -1,
+    6: 6,
+}
+
 RUNTIME_ENV_EXACT = {
     "OPENCLAW_GATEWAY_BIND",
 }
@@ -1677,11 +1686,16 @@ def main_agent_heartbeat(instance: ScaledInstance) -> dict[str, object] | None:
 
 def set_mattermost_autonomy_env(env_file: Path, enabled: bool, interval_minutes: int | None = None) -> None:
     write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_ENABLED", "true" if enabled else "false")
+    resolved_interval_minutes = max(1, interval_minutes) if interval_minutes is not None else None
     if interval_minutes is not None:
-        write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", f"{max(1, interval_minutes)}m")
+        write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", f"{resolved_interval_minutes}m")
     write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_LIGHT_CONTEXT", "true")
     write_or_update_env_value(env_file, "OPENCLAW_MATTERMOST_AUTONOMY_ISOLATED_SESSION", "true")
     env_values = {**DEFAULTS, **parse_env_file(env_file)}
+    if resolved_interval_minutes is None:
+        resolved_interval = normalize_minute_interval(env_values.get("OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", "6m"))
+        resolved_interval_minutes = int(resolved_interval[:-1])
+    seed_mattermost_autonomy_interval_overrides(env_file, resolved_interval_minutes)
     autonomy_model = env_values.get("OPENCLAW_MATTERMOST_AUTONOMY_MODEL", "").strip()
     if not autonomy_model:
         autonomy_model = resolved_model_ref(env_values) or DEFAULT_MATTERMOST_AUTONOMY_MODEL
@@ -2015,11 +2029,43 @@ def instance_override_env_key(base_key: str, instance_id: int) -> str:
     return f"{base_key}_INSTANCE_{instance_id:03d}"
 
 
+def normalize_minute_interval(value: str, fallback: str = "6m") -> str:
+    candidate = str(value).strip().lower()
+    match = re.fullmatch(r"(\d+)m", candidate)
+    if not match:
+        return fallback
+    return f"{max(1, int(match.group(1)))}m"
+
+
+def default_mattermost_autonomy_interval_for_instance(base_interval_minutes: int, instance_id: int) -> str:
+    offset = MATTERMOST_AUTONOMY_INTERVAL_OFFSETS.get(instance_id, 0)
+    return f"{max(1, base_interval_minutes + offset)}m"
+
+
+def seed_mattermost_autonomy_interval_overrides(env_file: Path, base_interval_minutes: int) -> dict[int, str]:
+    env_values = parse_env_file(env_file)
+    seeded: dict[int, str] = {}
+    for instance_id in sorted(MATTERMOST_AUTONOMY_INTERVAL_OFFSETS):
+        key = instance_override_env_key("OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", instance_id)
+        current = env_values.get(key, "").strip()
+        if current:
+            seeded[instance_id] = normalize_minute_interval(current)
+            continue
+        interval = default_mattermost_autonomy_interval_for_instance(base_interval_minutes, instance_id)
+        write_or_update_env_value(env_file, key, interval)
+        seeded[instance_id] = interval
+    return seeded
+
+
 def apply_instance_model_overrides(raw_env: dict[str, str], instance_id: int) -> dict[str, str]:
     overrides = dict(raw_env)
     model_override = overrides.get(instance_override_env_key("OPENCLAW_MODEL_REF", instance_id), "").strip()
     autonomy_override = overrides.get(
         instance_override_env_key("OPENCLAW_MATTERMOST_AUTONOMY_MODEL", instance_id),
+        "",
+    ).strip()
+    autonomy_interval_override = overrides.get(
+        instance_override_env_key("OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL", instance_id),
         "",
     ).strip()
     gemini_key_override = overrides.get(instance_override_env_key("GEMINI_API_KEY", instance_id), "").strip()
@@ -2030,6 +2076,8 @@ def apply_instance_model_overrides(raw_env: dict[str, str], instance_id: int) ->
         overrides["OPENCLAW_MATTERMOST_AUTONOMY_MODEL"] = autonomy_override
     elif model_override:
         overrides["OPENCLAW_MATTERMOST_AUTONOMY_MODEL"] = model_override
+    if autonomy_interval_override:
+        overrides["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL"] = normalize_minute_interval(autonomy_interval_override)
     if gemini_key_override:
         overrides["GEMINI_API_KEY"] = gemini_key_override
     elif google_key_override:

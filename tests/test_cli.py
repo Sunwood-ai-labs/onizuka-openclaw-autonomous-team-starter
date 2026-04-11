@@ -212,6 +212,36 @@ class CliTests(unittest.TestCase):
             self.assertEqual(instance.config.raw_env["OPENCLAW_MATTERMOST_BOT_TOKEN"], "mm-token-2")
             self.assertEqual(instance.config.raw_env["OPENCLAW_MATTERMOST_ENABLED"], "true")
 
+    def test_set_mattermost_autonomy_env_seeds_persona_intervals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            env_file = temp_root / ".env"
+            write_env_file(env_file)
+
+            cli.set_mattermost_autonomy_env(env_file, enabled=True, interval_minutes=6)
+            values = cli.parse_env_file(env_file)
+
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL"], "6m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_001"], "7m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_002"], "4m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_003"], "10m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_004"], "8m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_005"], "5m")
+            self.assertEqual(values["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_006"], "12m")
+
+    def test_scaled_instance_applies_autonomy_interval_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            env_file = temp_root / ".env"
+            write_env_file(env_file)
+            env_file.write_text(
+                env_file.read_text(encoding="utf-8") + "OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL_INSTANCE_005=5m\n",
+                encoding="utf-8",
+            )
+
+            instance = cli.scaled_instance(env_file, 5)
+            self.assertEqual(instance.config.raw_env["OPENCLAW_MATTERMOST_AUTONOMY_INTERVAL"], "5m")
+
     def test_ensure_openclaw_config_writes_mattermost_channel_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             temp_root = Path(tmp)
