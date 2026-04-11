@@ -12,7 +12,7 @@ This page is the fastest path to a working local team. If you want the role scaf
 ## Boot A Three-Agent Team
 
 ```powershell
-cd D:\Prj\openclaw-autonomous-team-starter
+cd D:\Prj\onizuka-openclaw-autonomous-team-starter
 uv sync
 Copy-Item .env.example .env
 notepad .env
@@ -25,7 +25,7 @@ notepad .env
 .\scripts\mattermost.ps1 smoke --count 3
 ```
 
-Public project name: `openclaw-autonomous-team-starter`
+Public project name: `onizuka-openclaw-autonomous-team-starter`
 Current helper command: `openclaw-podman`
 
 ## What Gets Created

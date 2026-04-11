@@ -2,8 +2,8 @@
 
 ## Included Reports
 
-- [GLM-5-Turbo report](https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter/blob/main/reports/pod-openclaw-glm5-turbo-report.md)
-- [Gemma report](https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter/blob/main/reports/pod-openclaw-gemma-report.md)
+- [GLM-5-Turbo report](https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter/blob/main/reports/pod-openclaw-glm5-turbo-report.md)
+- [Gemma report](https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter/blob/main/reports/pod-openclaw-gemma-report.md)
 
 ## What Was Verified
 
@@ -26,7 +26,7 @@ Treat that as an operational smoke check for seeded bot replies, not as a blanke
 
 Related lab evidence:
 
-- [Mattermost autonomy QA inventory](https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter/blob/main/reports/qa-inventory-mattermost-autochat-2026-04-09.md)
+- [Mattermost autonomy QA inventory](https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter/blob/main/reports/qa-inventory-mattermost-autochat-2026-04-09.md)
 
 The default seeded room is `triad-lab`, but optional autonomy experiments may also use additional public rooms depending on workspace instructions and lab setup.
 

@@ -1,6 +1,6 @@
 <div align="center">
 
-# openclaw-autonomous-team-starter
+# onizuka-openclaw-autonomous-team-starter
 
 ![Project header](./assets/header.svg)
 
@@ -8,18 +8,22 @@ Podman 上で小さな OpenClaw エージェントチームを立ち上げるた
 
 [English README](./README.md)
 
-![CI](https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter/actions/workflows/ci.yml/badge.svg)
-![License](https://img.shields.io/github/license/Sunwood-ai-labs/openclaw-autonomous-team-starter)
+![CI](https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/github/license/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Podman](https://img.shields.io/badge/podman-kube%20play-892CA0)
 
-[Docs Site](https://sunwood-ai-labs.github.io/openclaw-autonomous-team-starter/)
+[Docs Site](https://sunwood-ai-labs.github.io/onizuka-openclaw-autonomous-team-starter/)
 
 </div>
 
 ## 概要
 
 このリポジトリは、Windows 前提で OpenClaw の自律チームを立ち上げるためのスターターです。Podman が各エージェントの実行環境を分離し、Mattermost がローカルな協調面を担います。
+
+同時に、これは自律エージェントや AGI 指向の開発を目指す ONIZUKA シリーズの一つです。紹介リポジトリ:
+
+- [onizuka-agi-co/onizuka-agi-co](https://github.com/onizuka-agi-co/onizuka-agi-co)
 
 含まれるもの:
 
@@ -85,7 +89,7 @@ Mattermost 導線が最初から入っています。
 ## クイックスタート: 3 人チームを起動
 
 ```powershell
-cd D:\Prj\openclaw-autonomous-team-starter
+cd D:\Prj\onizuka-openclaw-autonomous-team-starter
 uv sync
 Copy-Item .env.example .env
 notepad .env
@@ -98,7 +102,7 @@ notepad .env
 .\scripts\mattermost.ps1 smoke --count 3
 ```
 
-公開プロジェクト名は `openclaw-autonomous-team-starter` ですが、現行の helper command 名は当面 `openclaw-podman` のままです。
+公開プロジェクト名は `onizuka-openclaw-autonomous-team-starter` ですが、現行の helper command 名は当面 `openclaw-podman` のままです。
 
 これで次が揃います。
 
@@ -122,7 +126,7 @@ notepad .env
 まず 1 体だけで試したい場合:
 
 ```powershell
-cd D:\Prj\openclaw-autonomous-team-starter
+cd D:\Prj\onizuka-openclaw-autonomous-team-starter
 uv sync
 Copy-Item .env.example .env
 notepad .env

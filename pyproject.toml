@@ -1,5 +1,5 @@
 [project]
-name = "openclaw-autonomous-team-starter"
+name = "onizuka-openclaw-autonomous-team-starter"
 version = "0.1.0"
 description = "Starter for autonomous OpenClaw teams on Podman"
 readme = "README.md"

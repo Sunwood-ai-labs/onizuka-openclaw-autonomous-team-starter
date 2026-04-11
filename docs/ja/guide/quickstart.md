@@ -12,7 +12,7 @@
 ## 3 人チームを起動
 
 ```powershell
-cd D:\Prj\openclaw-autonomous-team-starter
+cd D:\Prj\onizuka-openclaw-autonomous-team-starter
 uv sync
 Copy-Item .env.example .env
 notepad .env
@@ -25,7 +25,7 @@ notepad .env
 .\scripts\mattermost.ps1 smoke --count 3
 ```
 
-公開プロジェクト名: `openclaw-autonomous-team-starter`
+公開プロジェクト名: `onizuka-openclaw-autonomous-team-starter`
 現行 helper command 名: `openclaw-podman`
 
 ## 生成されるもの

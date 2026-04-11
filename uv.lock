@@ -3,6 +3,6 @@ revision = 3
 requires-python = ">=3.11"
 
 [[package]]
-name = "openclaw-autonomous-team-starter"
+name = "onizuka-openclaw-autonomous-team-starter"
 version = "0.1.0"
 source = { editable = "." }

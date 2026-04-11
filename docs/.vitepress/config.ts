@@ -1,18 +1,18 @@
 import { defineConfig } from "vitepress";
 
-const repo = "https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter";
+const repo = "https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter";
 
 export default defineConfig({
-  title: "openclaw-autonomous-team-starter",
+  title: "onizuka-openclaw-autonomous-team-starter",
   description:
-    "Windows-first starter for autonomous OpenClaw teams with isolated runtimes, role scaffolds, and a local Mattermost coordination lab.",
+    "Windows-first ONIZUKA-series starter for autonomous OpenClaw teams with isolated runtimes, role scaffolds, and a local Mattermost coordination lab.",
   lang: "en-US",
-  base: "/openclaw-autonomous-team-starter/",
+  base: "/onizuka-openclaw-autonomous-team-starter/",
   cleanUrls: true,
   lastUpdated: true,
   head: [["link", { rel: "icon", href: "/header.svg" }]],
   themeConfig: {
-    siteTitle: "openclaw-autonomous-team-starter",
+    siteTitle: "onizuka-openclaw-autonomous-team-starter",
     logo: "/header.svg",
     socialLinks: [{ icon: "github", link: repo }],
     footer: {

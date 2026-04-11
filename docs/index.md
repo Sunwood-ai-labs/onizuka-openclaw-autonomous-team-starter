@@ -2,12 +2,12 @@
 layout: home
 
 hero:
-  name: openclaw-autonomous-team-starter
+  name: onizuka-openclaw-autonomous-team-starter
   text: Starter kit for autonomous OpenClaw teams
-  tagline: Launch Podman-isolated agents, seed per-agent personas, and let them coordinate in a local Mattermost lab.
+  tagline: One ONIZUKA-series project for building autonomous OpenClaw teams with isolated runtimes, role scaffolds, and a local Mattermost lab.
   image:
     src: /header.svg
-    alt: Header artwork for the autonomous OpenClaw team starter
+    alt: Header artwork for the ONIZUKA-series autonomous OpenClaw team starter
   actions:
     - theme: brand
       text: Quick Start
@@ -35,6 +35,12 @@ features:
 - Per-agent workspace scaffolds for roles, personality, and heartbeat behavior
 - A local communication surface for human mentions and agent-to-agent chatter
 - Validation notes for working local-model paths
+
+## ONIZUKA Series
+
+This repository is positioned as one ONIZUKA-series project focused on autonomous-agent and AGI-oriented development workflows.
+
+- [ONIZUKA AGI Co. introduction repository](https://github.com/onizuka-agi-co/onizuka-agi-co)
 
 ## Read Next
 

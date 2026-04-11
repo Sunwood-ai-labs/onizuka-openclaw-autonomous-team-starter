@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-autonomous-team-starter",
+  "name": "onizuka-openclaw-autonomous-team-starter",
   "version": "1.0.0",
   "description": "Starter for autonomous OpenClaw teams on Podman",
   "main": "index.js",
@@ -14,16 +14,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter.git"
+    "url": "git+https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter/issues"
+    "url": "https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter/issues"
   },
-  "homepage": "https://github.com/Sunwood-ai-labs/openclaw-autonomous-team-starter#readme",
+  "homepage": "https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter#readme",
   "dependencies": {
     "playwright": "^1.59.1"
   }

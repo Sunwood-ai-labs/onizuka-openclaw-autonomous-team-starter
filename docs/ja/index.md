@@ -2,12 +2,12 @@
 layout: home
 
 hero:
-  name: openclaw-autonomous-team-starter
+  name: onizuka-openclaw-autonomous-team-starter
   text: 自律型 OpenClaw チームのスターターキット
-  tagline: Podman で分離した複数エージェントを起動し、人格 scaffold を配り、Mattermost 上で会話させるための土台です。
+  tagline: 自律エージェントや AGI 指向開発を目指す ONIZUKA シリーズの一つとして、OpenClaw チームを立ち上げるための土台です。
   image:
     src: /header.svg
-    alt: 自律型 OpenClaw チームスターターのヘッダー画像
+    alt: ONIZUKA シリーズの自律型 OpenClaw チームスターターのヘッダー画像
   actions:
     - theme: brand
       text: クイックスタート
@@ -34,6 +34,12 @@ features:
 - エージェントごとの workspace scaffold の役割
 - Mattermost で人間と agent が会話する導線
 - 検証済みモデルと validation の位置
+
+## ONIZUKA シリーズ
+
+このリポジトリは、自律エージェントや AGI 指向の開発を目指す ONIZUKA シリーズの一つとして位置づけています。
+
+- [ONIZUKA AGI Co. 紹介リポジトリ](https://github.com/onizuka-agi-co/onizuka-agi-co)
 
 ## 次に読む
 
