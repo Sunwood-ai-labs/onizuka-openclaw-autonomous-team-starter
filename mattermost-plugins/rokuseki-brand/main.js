@@ -2,7 +2,6 @@
   const PLUGIN_ID = "jp.sunwood.rokuseki-brand";
   const TEAM_SLUG = "openclaw";
   const CHANNEL_SLUG = "triad-lab";
-  const PANEL_ID = "rokuseki-channel-brand-panel";
   const HERO_ID = "rokuseki-channel-brand-hero";
   const HEADER_CREST_ID = "rokuseki-channel-header-crest";
   const STYLE_ID = "rokuseki-channel-brand-style";
@@ -41,102 +40,6 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      #${PANEL_ID} {
-        position: fixed;
-        top: 72px;
-        right: 24px;
-        z-index: 60;
-        width: 332px;
-        border-radius: 22px;
-        overflow: hidden;
-        background:
-          radial-gradient(circle at top left, rgba(255,255,255,0.22), transparent 42%),
-          linear-gradient(135deg, #0f1730, #25406f 48%, #6faee5 100%);
-        color: #f7fbff;
-        box-shadow: 0 18px 44px rgba(8, 12, 26, 0.24);
-        border: 1px solid rgba(255,255,255,0.14);
-        font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
-      }
-
-      #${PANEL_ID} * {
-        box-sizing: border-box;
-      }
-
-      #${PANEL_ID} .rokuseki-card {
-        padding: 16px 16px 14px;
-      }
-
-      #${PANEL_ID} .rokuseki-top {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      #${PANEL_ID} .rokuseki-crest {
-        width: 56px;
-        height: 56px;
-        flex: 0 0 56px;
-      }
-
-      #${PANEL_ID} .rokuseki-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: rgba(255,255,255,0.76);
-      }
-
-      #${PANEL_ID} .rokuseki-title {
-        margin-top: 4px;
-        font-size: 22px;
-        line-height: 1.15;
-        font-weight: 800;
-      }
-
-      #${PANEL_ID} .rokuseki-copy {
-        margin-top: 12px;
-        font-size: 13px;
-        line-height: 1.55;
-        color: rgba(255,255,255,0.86);
-      }
-
-      #${PANEL_ID} .rokuseki-roster {
-        margin-top: 12px;
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-      }
-
-      #${PANEL_ID} .rokuseki-chip {
-        padding: 8px 10px;
-        border-radius: 14px;
-        background: rgba(255,255,255,0.12);
-        border: 1px solid rgba(255,255,255,0.12);
-        min-height: 52px;
-      }
-
-      #${PANEL_ID} .rokuseki-chip-name {
-        font-size: 12px;
-        font-weight: 700;
-      }
-
-      #${PANEL_ID} .rokuseki-chip-role {
-        margin-top: 2px;
-        font-size: 11px;
-        line-height: 1.35;
-        color: rgba(255,255,255,0.82);
-      }
-
-      #${PANEL_ID} .rokuseki-chip-model {
-        margin-top: 4px;
-        font-size: 10px;
-        line-height: 1.25;
-        color: rgba(210, 235, 255, 0.92);
-      }
-
       #${HERO_ID} {
         margin: 0 auto 14px;
         display: flex;
@@ -200,19 +103,6 @@
         margin-top: 4px;
       }
 
-      @media (max-width: 1200px) {
-        #${PANEL_ID} {
-          width: 296px;
-          top: 64px;
-          right: 12px;
-        }
-      }
-
-      @media (max-width: 900px) {
-        #${PANEL_ID} {
-          display: none;
-        }
-      }
     `;
 
     document.head.appendChild(style);
@@ -242,18 +132,6 @@
         </div>
       </div>
     `;
-  }
-
-  function ensurePanel() {
-    if (document.getElementById(PANEL_ID)) {
-      return;
-    }
-
-    const panel = document.createElement("aside");
-    panel.id = PANEL_ID;
-    panel.setAttribute("aria-label", "ろくせき談話室 brand panel");
-    panel.innerHTML = panelMarkup();
-    document.body.appendChild(panel);
   }
 
   function heroMarkup() {
@@ -307,10 +185,6 @@
     top.insertBefore(crest, top.firstChild);
   }
 
-  function removePanel() {
-    document.getElementById(PANEL_ID)?.remove();
-  }
-
   function removeIntroHero() {
     document.getElementById(HERO_ID)?.remove();
     const intro = document.getElementById("channelIntro");
@@ -336,13 +210,11 @@
 
     if (isTargetChannel()) {
       ensureStyle();
-      ensurePanel();
       ensureIntroHero();
       ensureHeaderCrest();
       return;
     }
 
-    removePanel();
     removeIntroHero();
     removeHeaderCrest();
   }
@@ -406,7 +278,6 @@
       if (this.observer) {
         this.observer.disconnect();
       }
-      removePanel();
       removeIntroHero();
       removeHeaderCrest();
       window.removeEventListener("hashchange", syncPanel);
