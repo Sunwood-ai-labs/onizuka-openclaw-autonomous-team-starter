@@ -1,0 +1,10 @@
+{
+  "id": "jp.sunwood.rokuseki-brand",
+  "name": "Rokuseki Channel Brand",
+  "description": "Adds a custom crest and channel brand panel for the triad-lab channel.",
+  "version": "0.1.0",
+  "min_server_version": "10.0.0",
+  "webapp": {
+    "bundle_path": "main.js"
+  }
+}
