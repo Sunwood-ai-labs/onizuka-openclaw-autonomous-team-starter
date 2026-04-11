@@ -70,6 +70,8 @@ AUTOCHAT_JOB_PREFIX = "shared-board-autochat"
 MATTERMOST_LOUNGE_JOB_PREFIX = "mattermost-lounge-autochat"
 MATTERMOST_ADMIN_PASSWORD_KEY = "OPENCLAW_MATTERMOST_ADMIN_PASSWORD"
 MATTERMOST_OPERATOR_PASSWORD_KEY = "OPENCLAW_MATTERMOST_OPERATOR_PASSWORD"
+MATTERMOST_ADMIN_USERNAME_KEY = "OPENCLAW_MATTERMOST_ADMIN_USERNAME"
+MATTERMOST_OPERATOR_USERNAME_KEY = "OPENCLAW_MATTERMOST_OPERATOR_USERNAME"
 MATTERMOST_BOT_TOKEN_KEY_TEMPLATE = "OPENCLAW_MATTERMOST_BOT_TOKEN_{instance_id:03d}"
 MATTERMOST_ICON_ASSET_DIR = REPO_ROOT / "assets" / "mattermost-bots"
 MATTERMOST_ICON_FILENAMES = {
@@ -2930,6 +2932,8 @@ def ensure_mattermost_state(cfg: MattermostConfig) -> dict[str, str]:
     cfg.root_dir.mkdir(parents=True, exist_ok=True)
     state_path = mattermost_state_env_file(cfg.root_dir)
     state_values = parse_env_file(state_path)
+    write_or_update_env_value(state_path, MATTERMOST_ADMIN_USERNAME_KEY, cfg.raw_env["OPENCLAW_MATTERMOST_ADMIN_USERNAME"])
+    write_or_update_env_value(state_path, MATTERMOST_OPERATOR_USERNAME_KEY, cfg.raw_env["OPENCLAW_MATTERMOST_OPERATOR_USERNAME"])
     if not state_values.get(MATTERMOST_ADMIN_PASSWORD_KEY):
         write_or_update_env_value(state_path, MATTERMOST_ADMIN_PASSWORD_KEY, generate_mattermost_password("Admin"))
     if not state_values.get(MATTERMOST_OPERATOR_PASSWORD_KEY):
