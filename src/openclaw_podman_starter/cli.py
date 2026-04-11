@@ -54,6 +54,9 @@ DEFAULT_MATTERMOST_CONTAINER_NAME = "mattermost"
 DEFAULT_MATTERMOST_HOST_PORT = 8065
 DEFAULT_MATTERMOST_PUBLISH_HOST = "127.0.0.1"
 DEFAULT_MATTERMOST_BASE_URL = "http://mattermost:8065"
+DEFAULT_MATTERMOST_SITE_URL = "http://localhost:8065"
+DEFAULT_MATTERMOST_WEBSOCKET_URL = "ws://localhost:8065"
+DEFAULT_MATTERMOST_ALLOW_CORS_FROM = "http://localhost:8065 http://127.0.0.1:8065"
 DEFAULT_MATTERMOST_TEAM_NAME = "openclaw"
 DEFAULT_MATTERMOST_CHANNEL_NAME = "triad-lab"
 DEFAULT_MATTERMOST_AUTONOMY_MODEL = "zai/glm-5-turbo"
@@ -140,6 +143,9 @@ DEFAULTS = {
     "OPENCLAW_MATTERMOST_PUBLISH_HOST": DEFAULT_MATTERMOST_PUBLISH_HOST,
     "OPENCLAW_MATTERMOST_ENABLED": "false",
     "OPENCLAW_MATTERMOST_BASE_URL": DEFAULT_MATTERMOST_BASE_URL,
+    "OPENCLAW_MATTERMOST_SITE_URL": DEFAULT_MATTERMOST_SITE_URL,
+    "OPENCLAW_MATTERMOST_WEBSOCKET_URL": DEFAULT_MATTERMOST_WEBSOCKET_URL,
+    "OPENCLAW_MATTERMOST_ALLOW_CORS_FROM": DEFAULT_MATTERMOST_ALLOW_CORS_FROM,
     "OPENCLAW_MATTERMOST_CHATMODE": "oncall",
     "OPENCLAW_MATTERMOST_DM_POLICY": "open",
     "OPENCLAW_MATTERMOST_GROUP_POLICY": "open",
@@ -2890,7 +2896,18 @@ def mattermost_manifest_for(cfg: MattermostConfig) -> dict[str, object]:
                     ],
                     "env": [
                         {"name": "MM_SERVICESETTINGS_LISTENADDRESS", "value": ":8065"},
-                        {"name": "MM_SERVICESETTINGS_SITEURL", "value": mattermost_host_url(cfg)},
+                        {
+                            "name": "MM_SERVICESETTINGS_SITEURL",
+                            "value": cfg.raw_env.get("OPENCLAW_MATTERMOST_SITE_URL", "").strip() or DEFAULT_MATTERMOST_SITE_URL,
+                        },
+                        {
+                            "name": "MM_SERVICESETTINGS_WEBSOCKETURL",
+                            "value": cfg.raw_env.get("OPENCLAW_MATTERMOST_WEBSOCKET_URL", "").strip() or DEFAULT_MATTERMOST_WEBSOCKET_URL,
+                        },
+                        {
+                            "name": "MM_SERVICESETTINGS_ALLOWCORSFROM",
+                            "value": cfg.raw_env.get("OPENCLAW_MATTERMOST_ALLOW_CORS_FROM", "").strip() or DEFAULT_MATTERMOST_ALLOW_CORS_FROM,
+                        },
                         {"name": "MM_SERVICESETTINGS_ENABLELOCALMODE", "value": "true"},
                         {"name": "MM_SERVICESETTINGS_ENABLEDEVELOPER", "value": "true"},
                         {"name": "MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION", "value": "true"},

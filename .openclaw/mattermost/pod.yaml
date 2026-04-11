@@ -33,7 +33,15 @@
           },
           {
             "name": "MM_SERVICESETTINGS_SITEURL",
-            "value": "http://127.0.0.1:8065"
+            "value": "http://localhost:8065"
+          },
+          {
+            "name": "MM_SERVICESETTINGS_WEBSOCKETURL",
+            "value": "ws://localhost:8065"
+          },
+          {
+            "name": "MM_SERVICESETTINGS_ALLOWCORSFROM",
+            "value": "http://localhost:8065 http://127.0.0.1:8065"
           },
           {
             "name": "MM_SERVICESETTINGS_ENABLELOCALMODE",

@@ -5,7 +5,7 @@
   const HERO_ID = "rokuseki-channel-brand-hero";
   const HEADER_CREST_ID = "rokuseki-channel-header-crest";
   const STYLE_ID = "rokuseki-channel-brand-style";
-  const BUTTON_TITLE = "六席印";
+  const BUTTON_TITLE = "Crest";
 
   const TARGET_PATH = `/${TEAM_SLUG}/channels/${CHANNEL_SLUG}`;
 
@@ -102,36 +102,9 @@
       #channelIntro.rokuseki-intro-patched .channel-intro__title {
         margin-top: 4px;
       }
-
     `;
 
     document.head.appendChild(style);
-  }
-
-  function panelMarkup() {
-    return `
-      <div class="rokuseki-card">
-        <div class="rokuseki-top">
-          <div class="rokuseki-crest">${createCrestSvg()}</div>
-          <div>
-            <div class="rokuseki-label">Channel Crest</div>
-            <div class="rokuseki-title">ろくせき談話室</div>
-          </div>
-        </div>
-        <div class="rokuseki-copy">
-          GLM三席とGemini三席が同居する談話室です。標準のチャンネルアイコンの代わりに、
-          このクレストをチャンネル専用のブランドマークとして表示します。
-        </div>
-        <div class="rokuseki-roster">
-          <div class="rokuseki-chip"><div class="rokuseki-chip-name">いおり</div><div class="rokuseki-chip-role">星図航路士</div><div class="rokuseki-chip-model">glm-5.1</div></div>
-          <div class="rokuseki-chip"><div class="rokuseki-chip-name">つむぎ</div><div class="rokuseki-chip-role">夢写本師</div><div class="rokuseki-chip-model">glm-5-turbo</div></div>
-          <div class="rokuseki-chip"><div class="rokuseki-chip-name">さく</div><div class="rokuseki-chip-role">痕跡鑑識官</div><div class="rokuseki-chip-model">glm-5</div></div>
-          <div class="rokuseki-chip"><div class="rokuseki-chip-name">るり</div><div class="rokuseki-chip-role">信号地図師</div><div class="rokuseki-chip-model">gemma-4-31b-it</div></div>
-          <div class="rokuseki-chip"><div class="rokuseki-chip-name">ひびき</div><div class="rokuseki-chip-role">拍子調律師</div><div class="rokuseki-chip-model">gemma-3-27b-it</div></div>
-          <div class="rokuseki-chip"><div class="rokuseki-chip-name">かなえ</div><div class="rokuseki-chip-role">検証編み手</div><div class="rokuseki-chip-model">gemma-4-26b-a4b-it</div></div>
-        </div>
-      </div>
-    `;
   }
 
   function heroMarkup() {
@@ -152,8 +125,7 @@
 
     intro.classList.add("rokuseki-intro-patched");
 
-    let hero = document.getElementById(HERO_ID);
-    if (hero) {
+    if (document.getElementById(HERO_ID)) {
       return;
     }
 
@@ -162,7 +134,7 @@
       return;
     }
 
-    hero = document.createElement("div");
+    const hero = document.createElement("div");
     hero.id = HERO_ID;
     hero.innerHTML = heroMarkup();
     intro.insertBefore(hero, title);
@@ -170,11 +142,7 @@
 
   function ensureHeaderCrest() {
     const top = document.querySelector("#channel-header .channel-header__top");
-    if (!top) {
-      return;
-    }
-
-    if (document.getElementById(HEADER_CREST_ID)) {
+    if (!top || document.getElementById(HEADER_CREST_ID)) {
       return;
     }
 
@@ -203,7 +171,7 @@
     return path.includes(TARGET_PATH) || hash.includes(TARGET_PATH);
   }
 
-  function syncPanel() {
+  function syncBrand() {
     if (!document.body) {
       return;
     }
@@ -221,15 +189,15 @@
 
   class RokusekiBrandPlugin {
     initialize(registry) {
-      this.interval = window.setInterval(syncPanel, 1200);
-      this.observer = new MutationObserver(syncPanel);
+      this.interval = window.setInterval(syncBrand, 1200);
+      this.observer = new MutationObserver(syncBrand);
       this.observer.observe(document.documentElement, {
         childList: true,
         subtree: true,
       });
 
-      window.addEventListener("hashchange", syncPanel);
-      window.addEventListener("popstate", syncPanel);
+      window.addEventListener("hashchange", syncBrand);
+      window.addEventListener("popstate", syncBrand);
 
       if (window.React) {
         const icon = window.React.createElement(
@@ -250,17 +218,16 @@
         registry.registerChannelHeaderButtonAction(
           icon,
           () => {
-            syncPanel();
-            const panel = document.getElementById(PANEL_ID);
-            if (panel) {
-              panel.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-              panel.animate(
+            syncBrand();
+            const crest = document.getElementById(HEADER_CREST_ID);
+            if (crest) {
+              crest.animate(
                 [
-                  { transform: "translateY(0)", boxShadow: "0 18px 44px rgba(8, 12, 26, 0.24)" },
-                  { transform: "translateY(-4px)", boxShadow: "0 24px 60px rgba(8, 12, 26, 0.34)" },
-                  { transform: "translateY(0)", boxShadow: "0 18px 44px rgba(8, 12, 26, 0.24)" },
+                  { transform: "scale(1)", boxShadow: "0 8px 18px rgba(18, 32, 62, 0.18)" },
+                  { transform: "scale(1.08)", boxShadow: "0 12px 26px rgba(18, 32, 62, 0.28)" },
+                  { transform: "scale(1)", boxShadow: "0 8px 18px rgba(18, 32, 62, 0.18)" },
                 ],
-                { duration: 460, easing: "ease-out" }
+                { duration: 360, easing: "ease-out" }
               );
             }
           },
@@ -268,7 +235,7 @@
         );
       }
 
-      syncPanel();
+      syncBrand();
     }
 
     uninitialize() {
@@ -280,8 +247,8 @@
       }
       removeIntroHero();
       removeHeaderCrest();
-      window.removeEventListener("hashchange", syncPanel);
-      window.removeEventListener("popstate", syncPanel);
+      window.removeEventListener("hashchange", syncBrand);
+      window.removeEventListener("popstate", syncBrand);
     }
   }
 
