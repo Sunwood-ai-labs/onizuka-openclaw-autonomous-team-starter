@@ -4,7 +4,6 @@
   const CHANNEL_SLUG = "triad-lab";
   const HERO_ID = "rokuseki-channel-brand-hero";
   const HEADER_CREST_ID = "rokuseki-channel-header-crest";
-  const SIDEBAR_CREST_ID = "rokuseki-sidebar-crest";
   const STYLE_ID = "rokuseki-channel-brand-style";
   const BUTTON_TITLE = "Crest";
 
@@ -69,26 +68,6 @@
         flex: 0 0 32px;
       }
 
-      .${SIDEBAR_CREST_ID} {
-        display: inline-flex;
-        width: 18px;
-        height: 18px;
-        margin-right: 8px;
-        margin-left: -1px;
-        border-radius: 6px;
-        overflow: hidden;
-        flex: 0 0 18px;
-      }
-
-      .${SIDEBAR_CREST_ID} svg {
-        width: 18px;
-        height: 18px;
-      }
-
-      .rokuseki-sidebar-icon-hidden {
-        display: none !important;
-      }
-
       #channel-header .channel-header__top {
         display: flex;
         align-items: center;
@@ -107,9 +86,7 @@
   }
 
   function heroMarkup() {
-    return `
-      <div class="rokuseki-hero-crest">${createCrestSvg()}</div>
-    `;
+    return `<div class="rokuseki-hero-crest">${createCrestSvg()}</div>`;
   }
 
   function ensureIntroHero() {
@@ -143,41 +120,9 @@
 
     const crest = document.createElement("span");
     crest.id = HEADER_CREST_ID;
-    crest.setAttribute("aria-label", "\u308d\u304f\u305b\u304d\u8ac7\u8a71\u5ba4 crest");
+    crest.setAttribute("aria-label", "ろくせき談話室 crest");
     crest.innerHTML = createCrestSvg();
     top.insertBefore(crest, top.firstChild);
-  }
-
-  function ensureSidebarCrest() {
-    const labelCandidates = [...document.querySelectorAll("span, strong, div, a, button")]
-      .filter((el) => (el.textContent || "").trim() === "ろくせき談話室");
-
-    if (!labelCandidates.length) {
-      return;
-    }
-
-    for (const label of labelCandidates) {
-      const row =
-        label.closest('a, button, li, [class*="SidebarChannel"], [class*="SidebarLink"], [class*="SidebarItem"]') ||
-        label.parentElement;
-
-      if (!row) {
-        continue;
-      }
-
-      if (!row.querySelector(`.${SIDEBAR_CREST_ID}`)) {
-        const crest = document.createElement("span");
-        crest.className = SIDEBAR_CREST_ID;
-        crest.setAttribute("aria-hidden", "true");
-        crest.innerHTML = createCrestSvg();
-        label.parentElement?.insertBefore(crest, label);
-      }
-
-      const icon = row.querySelector('svg, i[class*="icon"], span[class*="icon"]');
-      if (icon && !icon.classList.contains(SIDEBAR_CREST_ID)) {
-        icon.classList.add("rokuseki-sidebar-icon-hidden");
-      }
-    }
   }
 
   function removeIntroHero() {
@@ -190,11 +135,6 @@
 
   function removeHeaderCrest() {
     document.getElementById(HEADER_CREST_ID)?.remove();
-  }
-
-  function removeSidebarCrests() {
-    document.querySelectorAll(`.${SIDEBAR_CREST_ID}`).forEach((el) => el.remove());
-    document.querySelectorAll(".rokuseki-sidebar-icon-hidden").forEach((el) => el.classList.remove("rokuseki-sidebar-icon-hidden"));
   }
 
   function isTargetChannel() {
@@ -212,13 +152,11 @@
       ensureStyle();
       ensureIntroHero();
       ensureHeaderCrest();
-      ensureSidebarCrest();
       return;
     }
 
     removeIntroHero();
     removeHeaderCrest();
-    removeSidebarCrests();
   }
 
   class RokusekiBrandPlugin {
@@ -246,7 +184,7 @@
               fontSize: "16px",
             },
           },
-          "\u2726"
+          "✦"
         );
 
         registry.registerChannelHeaderButtonAction(
@@ -281,7 +219,6 @@
       }
       removeIntroHero();
       removeHeaderCrest();
-      removeSidebarCrests();
       window.removeEventListener("hashchange", syncBrand);
       window.removeEventListener("popstate", syncBrand);
     }
