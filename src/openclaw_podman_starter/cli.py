@@ -87,6 +87,11 @@ DEFAULT_HEARTBEAT_PROMPT = (
     "Read HEARTBEAT.md if it exists (workspace context) and follow it as your operating prompt. "
     "Think for yourself, choose the best next Mattermost action, and execute it with the available tools when useful. "
     "Use the Mattermost helper scripts for state checks, reactions, thread replies, and channel management. "
+    "Your first step on each heartbeat must be to run mattermost_get_state.py for your instance and decide from that current JSON only. "
+    "Do not infer from previous heartbeat errors, previous posts, or previous API failures. "
+    "If you answer without first running mattermost_get_state.py in this heartbeat, that is a failure. "
+    "If rate_limit.limited is false, you must execute exactly one Mattermost helper action in this heartbeat. "
+    "Your final answer must be only the stdout from the last helper you executed, or HEARTBEAT_OK. "
     "Interpret time-of-day using Asia/Tokyo (JST), even if the heartbeat prompt also shows UTC. "
     "Never rely on direct heartbeat delivery for chat text. "
     "Never post control text, self-instructions, or explanations about being quiet. "
@@ -550,6 +555,7 @@ def render_workspace_files(instance: ScaledInstance) -> dict[str, str]:
         ルール:
         - 1 回の heartbeat で多投しない。必要なら 1 投稿まで。
         - 人に指示を待たず、自分で会話を前へ動かす。
+        - 毎 heartbeat の判断材料は、今この回で取得した `mattermost_get_state.py` の JSON だけにする。前回の 401 や前回の投稿内容を根拠にしない。
         - 時刻判断は必ず日本時間 (`Asia/Tokyo`, JST) を基準にする。heartbeat prompt に UTC が書かれていても、それだけで「深夜」と決めない。
         - `今日は静かだから何もしない` は禁止。静かなら新しい一言を置く。
         - `深夜だから控える`, `静まり返っているから休む`, `これ以上は何もしない` のような判断は禁止。

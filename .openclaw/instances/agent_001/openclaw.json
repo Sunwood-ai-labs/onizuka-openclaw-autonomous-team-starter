@@ -16,7 +16,7 @@
       "heartbeat": {
         "every": "0m",
         "target": "none",
-        "prompt": "Read HEARTBEAT.md if it exists (workspace context) and follow it as your operating prompt. Think for yourself, choose the best next Mattermost action, and execute it with the available tools when useful. Use the Mattermost helper scripts for state checks, reactions, thread replies, and channel management. Interpret time-of-day using Asia/Tokyo (JST), even if the heartbeat prompt also shows UTC. Never rely on direct heartbeat delivery for chat text. Never post control text, self-instructions, or explanations about being quiet. Keep the conversation moving on every heartbeat; if the room is quiet, start a new natural line yourself. Never stop because it feels late, quiet, or complete. If you decide not to speak, reply with exactly HEARTBEAT_OK and nothing else. Only reply HEARTBEAT_OK when you are rate-limited or blocked by an API error.",
+        "prompt": "Read HEARTBEAT.md if it exists (workspace context) and follow it as your operating prompt. Think for yourself, choose the best next Mattermost action, and execute it with the available tools when useful. Use the Mattermost helper scripts for state checks, reactions, thread replies, and channel management. Your first step on each heartbeat must be to run mattermost_get_state.py for your instance and decide from that current JSON only. Do not infer from previous heartbeat errors, previous posts, or previous API failures. If you answer without first running mattermost_get_state.py in this heartbeat, that is a failure. If rate_limit.limited is false, you must execute exactly one Mattermost helper action in this heartbeat. Your final answer must be only the stdout from the last helper you executed, or HEARTBEAT_OK. Interpret time-of-day using Asia/Tokyo (JST), even if the heartbeat prompt also shows UTC. Never rely on direct heartbeat delivery for chat text. Never post control text, self-instructions, or explanations about being quiet. Keep the conversation moving on every heartbeat; if the room is quiet, start a new natural line yourself. Never stop because it feels late, quiet, or complete. If you decide not to speak, reply with exactly HEARTBEAT_OK and nothing else. Only reply HEARTBEAT_OK when you are rate-limited or blocked by an API error.",
         "model": "zai/glm-5-turbo",
         "lightContext": true,
         "isolatedSession": true
@@ -30,7 +30,7 @@
           "lightContext": true,
           "isolatedSession": true,
           "target": "none",
-          "prompt": "Read HEARTBEAT.md if it exists (workspace context) and follow it as your operating prompt. Think for yourself, choose the best next Mattermost action, and execute it with the available tools when useful. Use the Mattermost helper scripts for state checks, reactions, thread replies, and channel management. Interpret time-of-day using Asia/Tokyo (JST), even if the heartbeat prompt also shows UTC. Never rely on direct heartbeat delivery for chat text. Never post control text, self-instructions, or explanations about being quiet. Keep the conversation moving on every heartbeat; if the room is quiet, start a new natural line yourself. Never stop because it feels late, quiet, or complete. If you decide not to speak, reply with exactly HEARTBEAT_OK and nothing else. Only reply HEARTBEAT_OK when you are rate-limited or blocked by an API error.",
+          "prompt": "Read HEARTBEAT.md if it exists (workspace context) and follow it as your operating prompt. Think for yourself, choose the best next Mattermost action, and execute it with the available tools when useful. Use the Mattermost helper scripts for state checks, reactions, thread replies, and channel management. Your first step on each heartbeat must be to run mattermost_get_state.py for your instance and decide from that current JSON only. Do not infer from previous heartbeat errors, previous posts, or previous API failures. If you answer without first running mattermost_get_state.py in this heartbeat, that is a failure. If rate_limit.limited is false, you must execute exactly one Mattermost helper action in this heartbeat. Your final answer must be only the stdout from the last helper you executed, or HEARTBEAT_OK. Interpret time-of-day using Asia/Tokyo (JST), even if the heartbeat prompt also shows UTC. Never rely on direct heartbeat delivery for chat text. Never post control text, self-instructions, or explanations about being quiet. Keep the conversation moving on every heartbeat; if the room is quiet, start a new natural line yourself. Never stop because it feels late, quiet, or complete. If you decide not to speak, reply with exactly HEARTBEAT_OK and nothing else. Only reply HEARTBEAT_OK when you are rate-limited or blocked by an API error.",
           "model": "zai/glm-5-turbo"
         }
       },
@@ -103,7 +103,7 @@
   "channels": {
     "mattermost": {
       "enabled": true,
-      "botToken": "u5intphyqpn8jqqff5dayc7m5c",
+      "botToken": "1su753jjojgh9eti3j5ai8snko",
       "baseUrl": "http://mattermost:8065",
       "chatmode": "oncall",
       "dmPolicy": "open",
