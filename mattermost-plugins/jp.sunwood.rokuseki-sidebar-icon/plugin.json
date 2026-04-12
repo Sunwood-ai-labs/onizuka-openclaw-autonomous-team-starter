@@ -1,0 +1,10 @@
+{
+  "id": "jp.sunwood.rokuseki-sidebar-icon",
+  "name": "Rokuseki Sidebar Icon",
+  "description": "Optional experimental sidebar crest override for the triad-lab channel.",
+  "version": "0.1.0",
+  "min_server_version": "10.0.0",
+  "webapp": {
+    "bundle_path": "webapp/dist/main.js"
+  }
+}
