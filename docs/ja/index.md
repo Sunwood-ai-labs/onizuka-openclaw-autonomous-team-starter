@@ -6,7 +6,7 @@ hero:
   text: "自律 OpenClaw チームのスターターキット"
   tagline: "ONIZUKA シリーズの一員として、隔離ランタイム・役割 scaffold・Mattermost 連携をまとめた Windows 前提のスターターです。"
   image:
-    src: "/header.svg"
+    src: "/favicon.svg"
     alt: "ONIZUKA シリーズ向け自律 OpenClaw チームスターターのヘッダー画像"
   actions:
     - theme: brand

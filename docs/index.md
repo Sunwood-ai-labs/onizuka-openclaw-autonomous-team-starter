@@ -6,8 +6,8 @@ hero:
   text: Starter kit for autonomous OpenClaw teams
   tagline: One ONIZUKA-series project for building autonomous OpenClaw teams with isolated runtimes, role scaffolds, and a local Mattermost lab.
   image:
-    src: /header.svg
-    alt: Header artwork for the ONIZUKA-series autonomous OpenClaw team starter
+    src: /favicon.svg
+    alt: Simple favicon artwork for the ONIZUKA-series autonomous OpenClaw team starter
   actions:
     - theme: brand
       text: Quick Start
