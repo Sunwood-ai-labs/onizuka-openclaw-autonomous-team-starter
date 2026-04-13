@@ -837,6 +837,20 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, "queued")
 
+    def test_run_mattermost_lounge_turn_now_falls_back_to_local_agent_after_gateway_failure(self) -> None:
+        instance = self.build_instance()
+        completed = [
+            mock.Mock(returncode=1, stdout="", stderr="gateway closed (1006 abnormal closure (no close frame)): no close reason"),
+        ]
+        with mock.patch.object(cli.subprocess, "run", side_effect=completed), mock.patch.object(
+            cli,
+            "run_pod_local_agent",
+            return_value={"payloads": [{"text": "POSTED abc123", "mediaUrl": None}]},
+        ), mock.patch.object(cli, "main_agent_heartbeat", return_value={"prompt": cli.DEFAULT_HEARTBEAT_PROMPT}):
+            result = cli.run_mattermost_lounge_turn_now(instance, timeout_seconds=30)
+
+        self.assertEqual(result, "POSTED abc123")
+
     def test_cmd_mattermost_lounge_run_now_fails_when_no_new_posts_observed(self) -> None:
         args = argparse.Namespace(env_file=Path("D:/tmp/.env"), count=2, timeout_ms=30000, wait_seconds=0)
         with mock.patch.object(cli, "ensure_env_file"), mock.patch.object(

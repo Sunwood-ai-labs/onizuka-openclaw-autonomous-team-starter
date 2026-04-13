@@ -1643,7 +1643,7 @@ def run_mattermost_lounge_turn_now(instance: ScaledInstance, timeout_seconds: in
     event_completed = run_command(
         event_command,
         "manual heartbeat wake failed",
-        allow_messages=("pairing required",),
+        allow_messages=("pairing required", "abnormal closure", "no close reason"),
         allow_timeout=True,
     )
     combined = "\n".join(part for part in (event_completed.stdout.strip(), event_completed.stderr.strip()) if part)
@@ -1666,16 +1666,31 @@ def run_mattermost_lounge_turn_now(instance: ScaledInstance, timeout_seconds: in
         event_completed = run_command(
             event_command,
             "manual heartbeat wake failed after pairing retry",
+            allow_messages=("abnormal closure", "no close reason"),
             allow_timeout=True,
         )
         combined = "\n".join(part for part in (event_completed.stdout.strip(), event_completed.stderr.strip()) if part)
     if event_completed.returncode != 0:
-        raise SystemExit(
-            f"manual heartbeat wake failed for instance {instance.instance_id}\n"
-            f"command: {command_for_display(event_command)}\n"
-            f"stdout:\n{event_completed.stdout}\n"
-            f"stderr:\n{event_completed.stderr}"
+        heartbeat = main_agent_heartbeat(instance) or {}
+        prompt = str(heartbeat.get("prompt", "")).strip() or DEFAULT_HEARTBEAT_PROMPT
+        session_id = f"mattermost-run-now-{instance.instance_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        payload = run_pod_local_agent(
+            instance,
+            prompt,
+            timeout_seconds=timeout_seconds,
+            agent_id="main",
+            session_id=session_id,
         )
+        fragments = payload_text_fragments(payload)
+        result = fragments[-1].strip() if fragments else ""
+        if not result:
+            raise SystemExit(
+                f"manual heartbeat wake failed for instance {instance.instance_id}\n"
+                f"command: {command_for_display(event_command)}\n"
+                f"stdout:\n{event_completed.stdout}\n"
+                f"stderr:\n{event_completed.stderr}"
+            )
+        return result
     if not combined:
         return "queued"
     try:
@@ -4088,7 +4103,7 @@ def cmd_mattermost_lounge_run_now(args: argparse.Namespace) -> int:
     for thread in new_threads:
         speaker = str(thread.get("last_handle") or thread.get("root_handle") or "?").strip() or "?"
         preview = str(thread.get("root_preview", "")).replace("\n", " ").strip()
-        print(f"  {speaker}: {preview[:120]}")
+        print(console_safe(f"  {speaker}: {preview[:120]}"))
     return 0
 
 
