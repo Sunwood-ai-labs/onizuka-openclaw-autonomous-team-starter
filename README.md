@@ -33,6 +33,15 @@ What it includes:
 - a local Mattermost lab for human mentions, bot smoke tests, and heartbeat-driven team chatter
 - validation reports for `zai/glm-5-turbo`, `ollama/gemma4:e4b`, and `ollama/gemma4:e2b`
 
+## Derived Use Case: ONI-CADIA
+
+[ONI-CADIA](https://github.com/Sunwood-ai-labs/ONI-CADIA) is a concrete public example of a downstream project built on top of this starter.
+
+It keeps the same Windows-first OpenClaw, Podman, persona-scaffold, and Mattermost-lab foundations, then republishes them under a dedicated project identity. Its public quick-start flow already switches the working path to `D:\Prj\ONI-CADIA`, which makes it a useful reference when you want to turn this starter into a named autonomous-team project instead of rebuilding the runtime glue from scratch.
+
+- Repository: [Sunwood-ai-labs/ONI-CADIA](https://github.com/Sunwood-ai-labs/ONI-CADIA)
+- Companion docs note: [ONI-CADIA use case](./docs/guide/articles/oni-cadia.md)
+
 ## Why This Starter Exists
 
 OpenClaw's official docs explain Podman, multiple gateways, and model providers, but building a repeatable local team still takes glue work:

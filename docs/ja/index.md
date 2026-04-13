@@ -49,6 +49,13 @@ features:
 - [v0.1.0 リリースノート](/ja/guide/releases/v0.1.0)
 - [v0.1.0 公開ウォークスルー](/ja/guide/articles/v0.1.0-launch)
 
+## ユースケース
+
+`ONI-CADIA` は、このスターターを土台にした具体的な派生ユースケースです。
+
+- [ONI-CADIA 紹介記事](/ja/guide/articles/oni-cadia)
+- [ONI-CADIA repository](https://github.com/Sunwood-ai-labs/ONI-CADIA)
+
 ## 次に読む
 
 - [自律チーム案内](/ja/guide/agent-teams)

@@ -8,6 +8,11 @@ Podman 上で小さな OpenClaw エージェントチームを立ち上げるた
 
 [English README](./README.md)
 
+派生ユースケース:
+
+- [ONI-CADIA](https://github.com/Sunwood-ai-labs/ONI-CADIA) - このスターターをベースに、`D:\Prj\ONI-CADIA` を前提とした専用プロジェクトとして展開している実例です。
+- [docs の紹介記事](./docs/ja/guide/articles/oni-cadia.md)
+
 ![CI](https://github.com/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/github/license/Sunwood-ai-labs/onizuka-openclaw-autonomous-team-starter)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)

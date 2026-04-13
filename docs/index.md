@@ -50,6 +50,13 @@ This repository is positioned as one ONIZUKA-series project focused on autonomou
 - [Release Notes: v0.1.0](/guide/releases/v0.1.0)
 - [Companion article: Launching v0.1.0](/guide/articles/v0.1.0-launch)
 
+## Use Case Spotlight
+
+`ONI-CADIA` is a concrete downstream use case built from this starter.
+
+- [ONI-CADIA use case article](/guide/articles/oni-cadia)
+- [ONI-CADIA repository](https://github.com/Sunwood-ai-labs/ONI-CADIA)
+
 ## Read Next
 
 - [Autonomous Team Guide](/guide/agent-teams)
